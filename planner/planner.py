@@ -1,9 +1,10 @@
 import numpy as np
+from planner.exercise import Exercise
 
 class Planner:
     def __init__(
             self,
-            exercises: np.ndarray,
+            exercises: np.ndarray[Exercise],
             num_muscle_groups: int,
             muscle_group_weights: np.ndarray | None = None,
             intensity_weights: np.ndarray | None = None,
@@ -13,7 +14,7 @@ class Planner:
         Initializes the Planner class with the given parameters.
 
         Parameters:
-            exercises (np.ndarray): An 3 x num_exercises array containing the details of the exercises, such as their names.
+            exercises (np.ndarray[Exercises]): An array containing the details of the available exercises.
             num_muscle_groups (int): The number of muscle groups to consider.
             muscle_group_weights (np.ndarray, optional): An array of shape (num_muscle_groups, 1) containing the weights for each muscle group. If None, it defaults to an array of ones.
             intensity_weights (np.ndarray, optional): An array of shape (3, 1) containing the weights for each intensity level (target, synergist, stabilizer). If None, it defaults to an array of ones.
@@ -34,9 +35,9 @@ class Planner:
             num_exercises_to_plan (int): The number of exercises to be planned.
 
         Returns:
-            np.ndarray: A 3D array representing the initialized population, where 0-dimension represents individuals, 1-dimension represents muscle type (target, synergist, stabilizer) and 2-dimension represents the exercise index.
+            np.ndarray: A 2D array representing the initialized population, where 0-dimension represents individuals, 1-dimension represents the exercise index.
         """
-        population = np.random.randint(0, self.num_muscle_groups, size=(population_size, 3, num_exercises_to_plan), dtype=np.int32)
+        population = np.random.randint(0, self.exercises.shape[0], size=(population_size, num_exercises_to_plan), dtype=np.int32)
 
         return population
 
@@ -45,7 +46,7 @@ class Planner:
         Evaluates the fitness of each individual in the population.
 
         Parameters:
-            population (np.ndarray): A 3D array representing the population, where 0-dimension represents individuals, 1-dimension represents muscle type (target, synergist, stabilizer) and 2-dimension represents the exercise index.
+            population (np.ndarray): A 2D array representing the population, where 0-dimension represents individuals, 1-dimension represents muscle type (target, synergist, stabilizer) and 2-dimension represents the exercise index.
 
         Returns:
             np.ndarray: A 1D array containing the fitness values for each individual in the population.
@@ -71,10 +72,15 @@ class Planner:
 
         return fitness_value
 
-    def get_intensity_matrix(self, individual: np.ndarray):
+    def get_intensity_matrix(self, individual: np.ndarray[int]):
         intensity_matrix = np.zeros(shape=(3, self.num_muscle_groups), dtype=np.int32)
-        for intensity in range(3):
-            for exercise in individual[intensity]:
-                intensity_matrix[intensity, exercise] += 1
+        for exercise_idx in individual:
+            exercise: Exercise = self.exercises[exercise_idx]
+            for muscle_group in exercise.targets:
+                intensity_matrix[0, muscle_group] += 1
+            for muscle_group in exercise.synergists:
+                intensity_matrix[1, muscle_group] += 1
+            for muscle_group in exercise.stabilizers:
+                intensity_matrix[2, muscle_group] += 1
 
         return intensity_matrix
