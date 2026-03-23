@@ -13,3 +13,9 @@ dependencies = [
     "pandas>=3.0.1",
     "requests>=2.32.5",
 ]
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["data*", "*planner*", ]
