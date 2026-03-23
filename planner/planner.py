@@ -5,7 +5,7 @@ class Planner:
     def __init__(
             self,
             exercises: np.ndarray[Exercise],
-            num_muscle_groups: int,
+            num_muscle_groups: int | None = None,
             muscle_group_weights: np.ndarray | None = None,
             intensity_weights: np.ndarray | None = None,
             balance_weight: float = 1.0,
@@ -14,17 +14,51 @@ class Planner:
         Initializes the Planner class with the given parameters.
 
         Parameters:
-            exercises (np.ndarray[Exercises]): An array containing the details of the available exercises.
-            num_muscle_groups (int): The number of muscle groups to consider.
-            muscle_group_weights (np.ndarray, optional): An array of shape (num_muscle_groups, 1) containing the weights for each muscle group. If None, it defaults to an array of ones.
-            intensity_weights (np.ndarray, optional): An array of shape (3, 1) containing the weights for each intensity level (target, synergist, stabilizer). If None, it defaults to an array of ones.
-            balance_weight (float, optional): The weight for the balance component in the fitness function. If None, it defaults to 1.0.
+            exercises (np.ndarray[Exercise]): Array of available exercises.
+            num_muscle_groups (int | None): Optional explicit number of muscle
+                groups. If omitted, it is inferred from unique muscle names
+                across all exercises.
+            muscle_group_weights (np.ndarray | None): Optional array of shape
+                (num_muscle_groups, 1). If None, defaults to ones.
+            intensity_weights (np.ndarray | None): Optional array of shape
+                (3, 1) for target/synergist/stabilizer intensities. If None,
+                defaults to ones.
+            balance_weight (float): Weight for the balance term in the fitness
+                function.
         """
         self.exercises = exercises
-        self.num_muscle_groups = num_muscle_groups
-        self.muscle_group_weights = muscle_group_weights if muscle_group_weights is not None else np.ones(shape=(num_muscle_groups, 1), dtype=np.float32)
+
+        self.muscle_group2idx, self.idx2muscle_group = self._build_muscle_group_index()
+        inferred_group_count = len(self.idx2muscle_group)
+        self.num_muscle_groups = inferred_group_count if num_muscle_groups is None else num_muscle_groups
+        if self.num_muscle_groups < inferred_group_count:
+            raise ValueError(
+                "num_muscle_groups is smaller than the number of unique muscle groups in exercises."
+            )
+
+        self.muscle_group_weights = muscle_group_weights if muscle_group_weights is not None else np.ones(shape=(self.num_muscle_groups, 1), dtype=np.float32)
         self.intensity_weights = intensity_weights if intensity_weights is not None else np.ones(shape=(3, 1), dtype=np.float32)
         self.balance_weight = balance_weight
+
+    @staticmethod
+    def _normalize_muscle_name(name: str) -> str:
+        """Normalize muscle names so equivalent labels map to one index."""
+        return " ".join(name.strip().lower().split())
+
+    def _build_muscle_group_index(self) -> tuple[dict[str, int], list[str]]:
+        """Build bidirectional mapping between muscle names and matrix indices."""
+        muscle_group2idx: dict[str, int] = {}
+        idx2muscle_group: list[str] = []
+
+        for exercise in self.exercises:
+            for muscles in (exercise.targets, exercise.synergists, exercise.stabilizers):
+                for muscle_name in muscles:
+                    key = self._normalize_muscle_name(muscle_name)
+                    if key not in muscle_group2idx:
+                        muscle_group2idx[key] = len(idx2muscle_group)
+                        idx2muscle_group.append(key)
+
+        return muscle_group2idx, idx2muscle_group
 
     def initialize_population(self, population_size: int, num_exercises_to_plan: int) -> np.ndarray:
         """
@@ -77,10 +111,13 @@ class Planner:
         for exercise_idx in individual:
             exercise: Exercise = self.exercises[exercise_idx]
             for muscle_group in exercise.targets:
-                intensity_matrix[0, muscle_group] += 1
+                muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
+                intensity_matrix[0, muscle_idx] += 1
             for muscle_group in exercise.synergists:
-                intensity_matrix[1, muscle_group] += 1
+                muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
+                intensity_matrix[1, muscle_idx] += 1
             for muscle_group in exercise.stabilizers:
-                intensity_matrix[2, muscle_group] += 1
+                muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
+                intensity_matrix[2, muscle_idx] += 1
 
         return intensity_matrix

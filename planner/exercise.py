@@ -1,8 +1,9 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 from typing import Sequence
 
-@dataclass
-class Exercise:
-    targets: Sequence[int]
-    synergists: Sequence[int]
-    stabilizers: Sequence[int]
+
+class Exercise(BaseModel):
+    name: str
+    targets: Sequence[str]
+    synergists: Sequence[str]
+    stabilizers: Sequence[str]

@@ -28,6 +28,8 @@ class DataLoader(AbstractDataLoader):
 		"""
 		self.csv_path = Path(csv_path).expanduser().resolve()
 		self._raw_df: pd.DataFrame | None = None
+		self._muscle_group2idx: dict[str, int] | None = None
+		self._idx2muscle_group: dict[int, str] | None = None
 		self._muscle_group_count: int | None = None
 
 	@staticmethod
