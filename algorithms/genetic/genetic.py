@@ -51,3 +51,56 @@ class Genetic:
 
         else:
             raise ValueError("Invalid crossover_type")
+
+    def next_generation(
+            self,
+            population: np.ndarray,
+            elite_count: int = 0,
+        ) -> np.ndarray:
+        """Create the next population by minimizing the fitness (cost) function.
+
+        Args:
+            population: Current generation with shape ``(population_size, ...)``.
+            elite_count: Number of lowest-cost individuals copied directly to the next
+                generation before creating offspring.
+
+        Returns:
+            A new population array with the same shape as ``population``.
+
+        Raises:
+            ValueError: If the population shape is invalid, the population is too
+                small, or ``elite_count`` is outside the valid range.
+        """
+        if population.ndim < 2:
+            raise ValueError("Population must have shape (population_size, ...)")
+
+        population_size = population.shape[0]
+        if population_size < 2:
+            raise ValueError("Population size must be at least 2")
+
+        if elite_count < 0 or elite_count >= population_size:
+            raise ValueError("elite_count must be in range [0, population_size - 1]")
+
+        fitness_scores = np.array(
+            [self.fitness_function(individual) for individual in population],
+            dtype=np.float64
+        )
+
+        # Convert costs into positive selection weights (lower cost => higher weight).
+        selection_weights = np.max(fitness_scores) - fitness_scores + 1e-12
+        elite_indices = np.argsort(fitness_scores)[:elite_count] if elite_count > 0 else np.array([], dtype=int)
+
+        selection_probabilities = selection_weights / np.sum(selection_weights)
+
+        next_population = np.empty_like(population)
+
+        if elite_count > 0:
+            next_population[:elite_count] = population[elite_indices]
+
+        for i in range(elite_count, population_size):
+            p1_idx, p2_idx = self.rng.choice(population_size, size=2, p=selection_probabilities, replace=True)
+            child = self.crossover_op(population[p1_idx], population[p2_idx])
+            child = self.mutation_op(child)
+            next_population[i] = child
+
+        return next_population
