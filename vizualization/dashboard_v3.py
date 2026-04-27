@@ -25,24 +25,24 @@ def ba_parameters_form() -> dict | None:
     """Sidebar form for BA parameters. Returns dict on submit, None otherwise."""
     with st.sidebar.form("ba_params"):
         st.markdown("**Plan**")
-        num_exercises = st.number_input("Liczba ćwiczeń", 3, 30, 10)
-        max_cycles = st.number_input("Liczba cykli", 10, 1000, 100, step=10)
+        num_exercises = st.number_input("Number of exercises", 3, 30, 10)
+        max_cycles = st.number_input("Number of cycles", 10, 1000, 100, step=10)
 
-        st.markdown("**Populacja**")
-        population_size = st.number_input("Rozmiar populacji", 10, 500, 60, step=10)
+        st.markdown("**Population**")
+        population_size = st.number_input("Population size", 10, 500, 60, step=10)
         selected_sites = st.number_input("Selected sites (m)", 1, 50, 12)
         elite_sites = st.number_input("Elite sites (e)", 1, 20, 4)
-        recruited_elite = st.number_input("Pszczoły / elite (nep)", 1, 100, 16)
-        recruited_selected = st.number_input("Pszczoły / selected (nsp)", 1, 50, 8)
+        recruited_elite = st.number_input("Bees / elite (nep)", 1, 100, 16)
+        recruited_selected = st.number_input("Bees / selected (nsp)", 1, 50, 8)
 
-        st.markdown("**Sąsiedztwo**")
-        mutations = st.number_input("Mutacje", 1, 10, 1)
-        radius = st.slider("Promień", 0.05, 1.0, 0.35, step=0.05)
+        st.markdown("**Neighborhood**")
+        mutations = st.number_input("Mutations", 1, 10, 1)
+        radius = st.slider("Radius", 0.05, 1.0, 0.35, step=0.05)
 
-        st.markdown("**Inne**")
-        seed = st.number_input("Ziarno losowe", 0, 99999, 42)
+        st.markdown("**Other**")
+        seed = st.number_input("Random seed", 0, 99999, 42)
 
-        submitted = st.form_submit_button("▶️ Uruchom BA", use_container_width=True)
+        submitted = st.form_submit_button("▶️ Run BA", use_container_width=True)
         if not submitted:
             return None
         return {
@@ -63,18 +63,18 @@ def main():
     st.set_page_config(layout="wide", page_title="BA Workout Dashboard")
     st.title("🏋️ Bees Algorithm Workout Dashboard")
 
-    st.sidebar.header("⚙️ Parametry algorytmu")
+    st.sidebar.header("⚙️ Algorithm parameters")
     new_params = ba_parameters_form()
     if new_params is not None:
         if new_params["elite_sites"] > new_params["selected_sites"]:
-            st.sidebar.error("elite_sites musi być ≤ selected_sites")
+            st.sidebar.error("elite_sites must be ≤ selected_sites")
         else:
-            with st.spinner("Uruchamiam Bees Algorithm…"):
+            with st.spinner("Running Bees Algorithm…"):
                 run_ba(**new_params)
-            st.sidebar.success("Gotowe — wyniki przeładowane.")
+            st.sidebar.success("Done — results reloaded.")
 
     if not HISTORY_PATH.exists():
-        st.warning("Brak wyników. Uruchom algorytm w panelu po lewej.")
+        st.warning("No results. Run the algorithm in the left panel.")
         return
 
     history = load_history()
@@ -82,14 +82,14 @@ def main():
     metadata = history["metadata"]
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**Ostatni przebieg:**")
+    st.sidebar.markdown("**Last run:**")
     for param, value in metadata["ba_params"].items():
         st.sidebar.text(f"{param}: {value}")
 
-    gender = st.sidebar.radio("Sylwetka", ["Male", "Female"], horizontal=True)
+    gender = st.sidebar.radio("Body type", ["Male", "Female"], horizontal=True)
     body_gender = BodyGender.MALE if gender == "Male" else BodyGender.FEMALE
 
-    cycle_idx = st.sidebar.slider("Wybierz cykl", 0, len(cycles) - 1, len(cycles) - 1)
+    cycle_idx = st.sidebar.slider("Select cycle", 0, len(cycles) - 1, len(cycles) - 1)
     cycle_data = cycles[cycle_idx]
 
     # Convergence graph
@@ -113,16 +113,16 @@ def main():
     col2.metric("Avg Cost", f"{cycle_data['avg_cost']:.4f}")
     col3.metric("Min Cost", f"{cycle_data['min_cost']:.4f}")
     col4.metric("Population", cycle_data["population_size"])
-    col5.metric("Cykl", f"{cycle_data['cycle']} / {len(cycles)}")
+    col5.metric("Cycle", f"{cycle_data['cycle']} / {len(cycles)}")
     cum_evals = cycle_data.get("fitness_evals")
     total_evals = metadata.get("total_fitness_evals")
     if cum_evals is not None:
-        label = "Wywołania kosztu (do cyklu)"
+        label = "Cost evals (up to cycle)"
         value = f"{cum_evals:,}"
-        delta = f"łącznie: {total_evals:,}" if total_evals is not None else None
+        delta = f"total: {total_evals:,}" if total_evals is not None else None
         col6.metric(label, value, delta=delta, delta_color="off")
     elif total_evals is not None:
-        col6.metric("Wywołania kosztu (łącznie)", f"{total_evals:,}")
+        col6.metric("Cost evals (total)", f"{total_evals:,}")
 
     # Body map with intensity - Real MuscleMap version
     st.header("Muscle Activation Map - Real MuscleMap SVG Paths")
@@ -149,7 +149,7 @@ def main():
         hide_index=True,
         column_config={
             "Link": st.column_config.LinkColumn(
-                "Link", display_text="ExRx →", help="Otwórz opis ćwiczenia na ExRx.net"
+                "Link", display_text="ExRx →", help="Open exercise description on ExRx.net"
             ),
         },
     )
