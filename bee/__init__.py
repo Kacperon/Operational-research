@@ -1,0 +1,1 @@
+"""Bees Algorithm module."""

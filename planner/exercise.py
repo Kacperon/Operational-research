@@ -7,3 +7,4 @@ class Exercise(BaseModel):
     targets: Sequence[str]
     synergists: Sequence[str]
     stabilizers: Sequence[str]
+    url: str = ""

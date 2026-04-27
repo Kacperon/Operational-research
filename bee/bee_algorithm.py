@@ -17,6 +17,8 @@ class BeeSearchResult:
 	population_history: list[np.ndarray]
 	cost_history: list[np.ndarray]
 	best_cost_history: list[float]
+	fitness_evals_history: list[int]
+	total_fitness_evals: int
 
 	def to_json_dict(self) -> dict[str, Any]:
 		return {
@@ -25,6 +27,8 @@ class BeeSearchResult:
 			"population_history": [population.astype(int).tolist() for population in self.population_history],
 			"cost_history": [costs.astype(float).tolist() for costs in self.cost_history],
 			"best_cost_history": [float(value) for value in self.best_cost_history],
+			"fitness_evals_history": [int(v) for v in self.fitness_evals_history],
+			"total_fitness_evals": int(self.total_fitness_evals),
 		}
 
 
@@ -118,6 +122,8 @@ class BeeAlgorithm:
 		if max_cycles <= 0:
 			raise ValueError("max_cycles must be positive")
 
+		self.planner.fitness_evaluations = 0
+
 		population = self.planner.initialize_population(
 			population_size=self.population_size,
 			num_exercises_to_plan=num_exercises_to_plan,
@@ -127,6 +133,7 @@ class BeeAlgorithm:
 		population_history: list[np.ndarray] = []
 		cost_history: list[np.ndarray] = []
 		best_cost_history: list[float] = []
+		fitness_evals_history: list[int] = []
 
 		best_idx = int(np.argmin(costs))
 		best_individual = population[best_idx].copy()
@@ -171,6 +178,7 @@ class BeeAlgorithm:
 			population_history.append(population.copy())
 			cost_history.append(costs.copy())
 			best_cost_history.append(best_cost)
+			fitness_evals_history.append(int(self.planner.fitness_evaluations))
 
 		result = BeeSearchResult(
 			best_individual=best_individual,
@@ -178,6 +186,8 @@ class BeeAlgorithm:
 			population_history=population_history,
 			cost_history=cost_history,
 			best_cost_history=best_cost_history,
+			fitness_evals_history=fitness_evals_history,
+			total_fitness_evals=int(self.planner.fitness_evaluations),
 		)
 
 		if json_output_path is not None:

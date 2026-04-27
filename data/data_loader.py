@@ -88,12 +88,14 @@ class DataLoader(AbstractDataLoader):
 			synergists = self._parse_muscle_list(getattr(row, "Synergists", None))
 			stabilizers = self._parse_muscle_list(getattr(row, "Stabilizers", None))
 
+			url = str(getattr(row, "exercise_url", "") or "").strip()
 			exercises.append(
 				Exercise(
 					name=str(getattr(row, "exercise_name", "")).strip(),
 					targets=targets,
 					synergists=synergists,
 					stabilizers=stabilizers,
+					url=url,
 				)
 			)
 
