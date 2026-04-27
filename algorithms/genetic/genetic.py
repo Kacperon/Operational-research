@@ -81,10 +81,10 @@ class Genetic:
         if elite_count < 0 or elite_count >= population_size:
             raise ValueError("elite_count must be in range [0, population_size - 1]")
 
-        fitness_scores = np.array(
+        fitness_scores = np.asarray(
             [self.fitness_function(individual) for individual in population],
-            dtype=np.float64
-        )
+            dtype=np.float64,
+        ).reshape(population_size)
 
         # Convert costs into positive selection weights (lower cost => higher weight).
         selection_weights = np.max(fitness_scores) - fitness_scores + 1e-12
