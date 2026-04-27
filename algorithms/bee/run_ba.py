@@ -22,7 +22,7 @@ def run_ba(
     neighborhood_mutations: int = 1,
     neighborhood_radius: float = 0.35,
     random_seed: int = 42,
-    output_dir: str = "bee/results",
+    output_dir: str = "algorithms/bee/results",
 ) -> Path:
     """Run BA and save history to JSON."""
 
@@ -125,7 +125,7 @@ def main():
     parser.add_argument("--mutations", type=int, default=1, help="Neighborhood mutations")
     parser.add_argument("--radius", type=float, default=0.35, help="Neighborhood radius")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--output", type=str, default="bee/results", help="Output directory")
+    parser.add_argument("--output", type=str, default="algorithms/bee/results", help="Output directory")
 
     args = parser.parse_args()
 

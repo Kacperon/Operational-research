@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Bees Algorithm - wrapper for bee/run_ba.py"""
+"""Run Bees Algorithm - wrapper for algorithms/bee/run_ba.py"""
 
 from algorithms.bee.run_ba import main
 
