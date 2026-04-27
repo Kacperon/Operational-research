@@ -38,3 +38,50 @@ Gdzie macierz $X$ (o wymiarach $3 \times |G|$) jest reprezentacją planu $x$ tak
 Logika optymalizacji opiera się na dwóch filarach:
 * **Równowaga ($\gamma$):** Chcemy uniknąć sytuacji, w której niektóre grupy mięśniowe są skrajnie przetrenowane, a inne pominięte.
 * **Personalizacja ($\alpha$):** Jeśli mamy kilka podobnych rozwiązań o zbliżonej równowadze, wybieramy to, które kładzie większy nacisk na grupy mięśniowe, na których najbardziej nam zależy.
+
+---
+
+## Format danych
+
+**Wejście** — `data/exrx_exercises_muscles_clean.csv` (zescrapowane z ExRx.net):
+
+| kolumna | opis |
+|---|---|
+| `exercise_name` | nazwa ćwiczenia |
+| `exercise_url` | link do ExRx |
+| `body_part` | główna partia ciała |
+| `Target` | mięśnie docelowe (oddzielone `;`) |
+| `Synergists` | mięśnie współpracujące |
+| `Dynamic Stabilizers`, `Stabilizers`, `Antagonist Stabilizers` | stabilizatory |
+
+**Wyjście** — `bee/results/ba_full_history.json`:
+
+```json
+{
+  "metadata": { "num_exercises": 10, "num_cycles": 100, "ba_params": {...} },
+  "cycles": [
+    {
+      "cycle": 1,
+      "best_cost": 12.34,
+      "exercise_names": ["Barbell Squat", ...],
+      "intensity_by_muscle": [
+        {"muscle": "quadriceps", "target_count": 3, "synergist_count": 1,
+         "stabilizer_count": 0, "total_intensity": 4}
+      ]
+    }
+  ]
+}
+```
+
+## Uruchomienie
+
+```bash
+# 1. zależności
+uv sync
+
+# 2. optymalizacja (zapisuje bee/results/ba_full_history.json)
+uv run python run_ba.py
+
+# 3. dashboard z heatmapą MuscleMap
+uv run streamlit run vizualization/dashboard_v3.py
+```

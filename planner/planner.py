@@ -39,6 +39,7 @@ class Planner:
         self.muscle_group_weights = muscle_group_weights if muscle_group_weights is not None else np.ones(shape=(self.num_muscle_groups, 1), dtype=np.float32)
         self.intensity_weights = intensity_weights if intensity_weights is not None else np.ones(shape=(3, 1), dtype=np.float32)
         self.balance_weight = balance_weight
+        self.fitness_evaluations = 0
 
     @staticmethod
     def _normalize_muscle_name(name: str) -> str:
@@ -102,9 +103,10 @@ class Planner:
         intensity_matrix = self.get_intensity_matrix(individual)
         weighted_groups = self.intensity_weights.T @ intensity_matrix
         weighted_groups_avg = np.mean(weighted_groups)
-        fitness_value = self.balance_weight * np.linalg.norm(weighted_groups_avg - weighted_groups) - weighted_groups @ self.muscle_group_weights
+        fitness_value = self.balance_weight * np.linalg.norm(weighted_groups_avg - weighted_groups) - float((weighted_groups @ self.muscle_group_weights).sum())
+        self.fitness_evaluations += 1
 
-        return fitness_value
+        return float(fitness_value)
 
     def get_intensity_matrix(self, individual: np.ndarray[int]):
         intensity_matrix = np.zeros(shape=(3, self.num_muscle_groups), dtype=np.int32)

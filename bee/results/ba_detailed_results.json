@@ -1,0 +1,39 @@
+{
+  "best_cost": -140.11875787379986,
+  "best_individual": [
+    192,
+    215,
+    463,
+    166,
+    116,
+    440,
+    586,
+    413,
+    474,
+    166
+  ],
+  "exercise_names": [
+    "Suspended Side Bend",
+    "Bird Dog",
+    "Weighted Pull-up",
+    "Cable Seated Twist",
+    "Cable Kneeling Crunch",
+    "Biceps Row (high bar)",
+    "Suspended Rear Delt Row",
+    "Cable Straight Back Seated Row",
+    "Partner-assisted Pull-up",
+    "Cable Seated Twist"
+  ],
+  "convergence": [
+    -105.49748939333354,
+    -114.91287912808706,
+    -115.53865432903626,
+    -125.08155978342366,
+    -128.52553204935282,
+    -132.70469074940607,
+    -135.2692802716915,
+    -137.81930765356498,
+    -140.11875787379986,
+    -140.11875787379986
+  ]
+}
