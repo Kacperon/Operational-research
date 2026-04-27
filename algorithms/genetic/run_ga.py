@@ -21,6 +21,7 @@ def run_ga(
     mixing_ratio: float = 0.5,
     mutation_chance: float = 0.1,
     intensity_weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    muscle_group_weights: list[float] | tuple[float, ...] | None = None,
     random_seed: int = 42,
     output_dir: str = "algorithms/genetic/results",
 ) -> Path:
@@ -37,6 +38,14 @@ def run_ga(
         balance_weight=1.0,
         intensity_weights=planner_intensity_weights,
     )
+    if muscle_group_weights is not None:
+        parsed_muscle_group_weights = np.asarray(muscle_group_weights, dtype=np.float32).reshape(-1)
+        if parsed_muscle_group_weights.size != planner.num_muscle_groups:
+            raise ValueError(
+                "muscle_group_weights must have exactly "
+                f"{planner.num_muscle_groups} values (got {parsed_muscle_group_weights.size})."
+            )
+        planner.muscle_group_weights = parsed_muscle_group_weights.reshape(planner.num_muscle_groups, 1)
 
     np.random.seed(random_seed)
     rng = np.random.default_rng(random_seed)
@@ -90,6 +99,7 @@ def run_ga(
                 "mixing_ratio": mixing_ratio,
                 "mutation_chance": mutation_chance,
                 "intensity_weights": [float(v) for v in planner_intensity_weights.ravel()],
+                "muscle_group_weights": [float(v) for v in planner.muscle_group_weights.ravel()],
                 "random_seed": random_seed,
             },
         },
@@ -163,6 +173,13 @@ def main() -> None:
         default=(1.0, 1.0, 1.0),
         help="Planner intensity weights for target/synergist/stabilizer",
     )
+    parser.add_argument(
+        "--muscle-group-weights",
+        type=float,
+        nargs="*",
+        default=None,
+        help="Optional full muscle-group weights vector (same length as inferred muscle groups)",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", type=str, default="algorithms/genetic/results", help="Output directory")
 
@@ -177,6 +194,7 @@ def main() -> None:
         mixing_ratio=args.mixing_ratio,
         mutation_chance=args.mutation_chance,
         intensity_weights=tuple(args.intensity_weights),
+        muscle_group_weights=args.muscle_group_weights,
         random_seed=args.seed,
         output_dir=args.output,
     )

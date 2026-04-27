@@ -22,6 +22,7 @@ def run_ba(
     neighborhood_mutations: int = 1,
     neighborhood_radius: float = 0.35,
     intensity_weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    muscle_group_weights: list[float] | tuple[float, ...] | None = None,
     random_seed: int = 42,
     output_dir: str = "algorithms/bee/results",
 ) -> Path:
@@ -39,6 +40,14 @@ def run_ba(
         balance_weight=1.0,
         intensity_weights=planner_intensity_weights,
     )
+    if muscle_group_weights is not None:
+        parsed_muscle_group_weights = np.asarray(muscle_group_weights, dtype=np.float32).reshape(-1)
+        if parsed_muscle_group_weights.size != planner.num_muscle_groups:
+            raise ValueError(
+                "muscle_group_weights must have exactly "
+                f"{planner.num_muscle_groups} values (got {parsed_muscle_group_weights.size})."
+            )
+        planner.muscle_group_weights = parsed_muscle_group_weights.reshape(planner.num_muscle_groups, 1)
 
     ba = BeeAlgorithm(
         planner=planner,
@@ -71,6 +80,7 @@ def run_ba(
                 "neighborhood_mutations": neighborhood_mutations,
                 "neighborhood_radius": neighborhood_radius,
                 "intensity_weights": [float(v) for v in planner_intensity_weights.ravel()],
+                "muscle_group_weights": [float(v) for v in planner.muscle_group_weights.ravel()],
                 "random_seed": random_seed,
             },
         },
@@ -139,6 +149,13 @@ def main():
         default=(1.0, 1.0, 1.0),
         help="Planner intensity weights for target/synergist/stabilizer",
     )
+    parser.add_argument(
+        "--muscle-group-weights",
+        type=float,
+        nargs="*",
+        default=None,
+        help="Optional full muscle-group weights vector (same length as inferred muscle groups)",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", type=str, default="algorithms/bee/results", help="Output directory")
 
@@ -155,6 +172,7 @@ def main():
         neighborhood_mutations=args.mutations,
         neighborhood_radius=args.radius,
         intensity_weights=tuple(args.intensity_weights),
+        muscle_group_weights=args.muscle_group_weights,
         random_seed=args.seed,
         output_dir=args.output,
     )
