@@ -43,6 +43,11 @@ def ba_parameters_form() -> dict | None:
         mutations = st.number_input("Mutations", 1, 10, 1)
         radius = st.slider("Radius", 0.05, 1.0, 0.35, step=0.05)
 
+        st.markdown("**Planner intensity weights**")
+        ba_target_weight = st.number_input("Target weight", 0.0, 10.0, 1.0, step=0.1)
+        ba_synergist_weight = st.number_input("Synergist weight", 0.0, 10.0, 1.0, step=0.1)
+        ba_stabilizer_weight = st.number_input("Stabilizer weight", 0.0, 10.0, 1.0, step=0.1)
+
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42)
 
@@ -59,6 +64,11 @@ def ba_parameters_form() -> dict | None:
             "recruited_for_selected": int(recruited_selected),
             "neighborhood_mutations": int(mutations),
             "neighborhood_radius": float(radius),
+            "intensity_weights": (
+                float(ba_target_weight),
+                float(ba_synergist_weight),
+                float(ba_stabilizer_weight),
+            ),
             "random_seed": int(seed),
         }
 
@@ -79,6 +89,11 @@ def ga_parameters_form() -> dict | None:
         mixing_ratio = st.slider("Mixing ratio (uniform)", 0.0, 1.0, 0.5, step=0.05)
         mutation_chance = st.slider("Mutation chance", 0.0, 1.0, 0.1, step=0.01)
 
+        st.markdown("**Planner intensity weights**")
+        ga_target_weight = st.number_input("Target weight", 0.0, 10.0, 1.0, step=0.1, key="ga_target_weight")
+        ga_synergist_weight = st.number_input("Synergist weight", 0.0, 10.0, 1.0, step=0.1, key="ga_synergist_weight")
+        ga_stabilizer_weight = st.number_input("Stabilizer weight", 0.0, 10.0, 1.0, step=0.1, key="ga_stabilizer_weight")
+
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42, key="ga_seed")
 
@@ -93,6 +108,11 @@ def ga_parameters_form() -> dict | None:
             "crossover_type": str(crossover_type),
             "mixing_ratio": float(mixing_ratio),
             "mutation_chance": float(mutation_chance),
+            "intensity_weights": (
+                float(ga_target_weight),
+                float(ga_synergist_weight),
+                float(ga_stabilizer_weight),
+            ),
             "random_seed": int(seed),
         }
 

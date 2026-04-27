@@ -21,6 +21,7 @@ def run_ba(
     recruited_for_selected: int = 8,
     neighborhood_mutations: int = 1,
     neighborhood_radius: float = 0.35,
+    intensity_weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
     random_seed: int = 42,
     output_dir: str = "algorithms/bee/results",
 ) -> Path:
@@ -32,7 +33,12 @@ def run_ba(
 
     loader = DataLoader(csv_path)
     exercises_array = loader.exercises()
-    planner = Planner(exercises_array, balance_weight=1.0)
+    planner_intensity_weights = np.asarray(intensity_weights, dtype=np.float32).reshape(3, 1)
+    planner = Planner(
+        exercises_array,
+        balance_weight=1.0,
+        intensity_weights=planner_intensity_weights,
+    )
 
     ba = BeeAlgorithm(
         planner=planner,
@@ -64,6 +70,7 @@ def run_ba(
                 "recruited_for_selected": recruited_for_selected,
                 "neighborhood_mutations": neighborhood_mutations,
                 "neighborhood_radius": neighborhood_radius,
+                "intensity_weights": [float(v) for v in planner_intensity_weights.ravel()],
                 "random_seed": random_seed,
             },
         },
@@ -124,6 +131,14 @@ def main():
     parser.add_argument("--recruited-selected", type=int, default=8, help="Recruited for selected sites")
     parser.add_argument("--mutations", type=int, default=1, help="Neighborhood mutations")
     parser.add_argument("--radius", type=float, default=0.35, help="Neighborhood radius")
+    parser.add_argument(
+        "--intensity-weights",
+        type=float,
+        nargs=3,
+        metavar=("TARGET", "SYNERGIST", "STABILIZER"),
+        default=(1.0, 1.0, 1.0),
+        help="Planner intensity weights for target/synergist/stabilizer",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", type=str, default="algorithms/bee/results", help="Output directory")
 
@@ -139,6 +154,7 @@ def main():
         recruited_for_selected=args.recruited_selected,
         neighborhood_mutations=args.mutations,
         neighborhood_radius=args.radius,
+        intensity_weights=tuple(args.intensity_weights),
         random_seed=args.seed,
         output_dir=args.output,
     )

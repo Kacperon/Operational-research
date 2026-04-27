@@ -20,6 +20,7 @@ def run_ga(
     crossover_type: str = "one-point",
     mixing_ratio: float = 0.5,
     mutation_chance: float = 0.1,
+    intensity_weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
     random_seed: int = 42,
     output_dir: str = "algorithms/genetic/results",
 ) -> Path:
@@ -30,7 +31,12 @@ def run_ga(
 
     loader = DataLoader(csv_path)
     exercises_array = loader.exercises()
-    planner = Planner(exercises_array, balance_weight=1.0)
+    planner_intensity_weights = np.asarray(intensity_weights, dtype=np.float32).reshape(3, 1)
+    planner = Planner(
+        exercises_array,
+        balance_weight=1.0,
+        intensity_weights=planner_intensity_weights,
+    )
 
     np.random.seed(random_seed)
     rng = np.random.default_rng(random_seed)
@@ -83,6 +89,7 @@ def run_ga(
                 "crossover_type": crossover_type,
                 "mixing_ratio": mixing_ratio,
                 "mutation_chance": mutation_chance,
+                "intensity_weights": [float(v) for v in planner_intensity_weights.ravel()],
                 "random_seed": random_seed,
             },
         },
@@ -148,6 +155,14 @@ def main() -> None:
     )
     parser.add_argument("--mixing-ratio", type=float, default=0.5, help="Uniform crossover mixing ratio")
     parser.add_argument("--mutation-chance", type=float, default=0.1, help="Mutation probability per gene")
+    parser.add_argument(
+        "--intensity-weights",
+        type=float,
+        nargs=3,
+        metavar=("TARGET", "SYNERGIST", "STABILIZER"),
+        default=(1.0, 1.0, 1.0),
+        help="Planner intensity weights for target/synergist/stabilizer",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", type=str, default="algorithms/genetic/results", help="Output directory")
 
@@ -161,6 +176,7 @@ def main() -> None:
         crossover_type=args.crossover_type,
         mixing_ratio=args.mixing_ratio,
         mutation_chance=args.mutation_chance,
+        intensity_weights=tuple(args.intensity_weights),
         random_seed=args.seed,
         output_dir=args.output,
     )
