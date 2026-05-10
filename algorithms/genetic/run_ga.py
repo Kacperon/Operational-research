@@ -22,6 +22,7 @@ def run_ga(
     mutation_chance: float = 0.1,
     intensity_weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
     muscle_group_weights: list[float] | tuple[float, ...] | None = None,
+    normalize_helper_muscles: bool = True,
     random_seed: int = 42,
     output_dir: str = "algorithms/genetic/results",
 ) -> Path:
@@ -37,6 +38,7 @@ def run_ga(
         exercises_array,
         balance_weight=1.0,
         intensity_weights=planner_intensity_weights,
+        normalize_helper_muscles=normalize_helper_muscles,
     )
     if muscle_group_weights is not None:
         parsed_muscle_group_weights = np.asarray(muscle_group_weights, dtype=np.float32).reshape(-1)
@@ -128,10 +130,10 @@ def run_ga(
             "intensity_by_muscle": [
                 {
                     "muscle": planner.idx2muscle_group[i],
-                    "target_count": int(intensity_matrix[0, i]),
-                    "synergist_count": int(intensity_matrix[1, i]),
-                    "stabilizer_count": int(intensity_matrix[2, i]),
-                    "total_intensity": int(
+                    "target_count": float(intensity_matrix[0, i]),
+                    "synergist_count": float(intensity_matrix[1, i]),
+                    "stabilizer_count": float(intensity_matrix[2, i]),
+                    "total_intensity": float(
                         intensity_matrix[0, i] + intensity_matrix[1, i] + intensity_matrix[2, i]
                     ),
                 }
@@ -180,6 +182,12 @@ def main() -> None:
         default=None,
         help="Optional full muscle-group weights vector (same length as inferred muscle groups)",
     )
+    parser.add_argument(
+        "--normalize-helper-muscles",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Normalize synergist and stabilizer contributions across muscles in each role",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output", type=str, default="algorithms/genetic/results", help="Output directory")
 
@@ -195,6 +203,7 @@ def main() -> None:
         mutation_chance=args.mutation_chance,
         intensity_weights=tuple(args.intensity_weights),
         muscle_group_weights=args.muscle_group_weights,
+        normalize_helper_muscles=args.normalize_helper_muscles,
         random_seed=args.seed,
         output_dir=args.output,
     )
