@@ -22,4 +22,4 @@ dependencies = [
 package = true
 
 [tool.setuptools.packages.find]
-include = ["data*", "*planner*", "algorithms*"]
+include = ["data*", "*planner*", "algorithms*", "utils*"]
