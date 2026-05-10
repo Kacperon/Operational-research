@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 from collections import Counter
+import inspect
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -108,7 +109,10 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
     """Sidebar form for BA parameters. Returns dict on submit, None otherwise."""
     with st.sidebar.form("ba_params"):
         st.markdown("**Plan**")
-        num_exercises = st.number_input("Number of exercises", 3, 30, 10)
+        days = st.number_input("Training days", 1, 7, 3)
+        exercises_per_day = st.number_input("Exercises per day", 1, 10, 4)
+        total_exercises = int(days) * int(exercises_per_day)
+        st.caption(f"Total exercises: {total_exercises}")
         max_cycles = st.number_input("Number of cycles", 10, 1000, 100, step=10)
 
         st.markdown("**Population**")
@@ -150,8 +154,13 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
         submitted = st.form_submit_button("▶️ Run BA", width='stretch')
         if not submitted:
             return None
+        if total_exercises < 3 or total_exercises > 30:
+            st.sidebar.error("Total exercises must be between 3 and 30.")
+            return None
         return {
-            "num_exercises": int(num_exercises),
+            "num_exercises": total_exercises,
+            "days": int(days),
+            "exercises_per_day": int(exercises_per_day),
             "max_cycles": int(max_cycles),
             "population_size": int(population_size),
             "selected_sites": int(selected_sites),
@@ -175,7 +184,10 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
     """Sidebar form for GA parameters. Returns dict on submit, None otherwise."""
     with st.sidebar.form("ga_params"):
         st.markdown("**Plan**")
-        num_exercises = st.number_input("Number of exercises", 3, 30, 10, key="ga_num_exercises")
+        days = st.number_input("Training days", 1, 7, 3, key="ga_days")
+        exercises_per_day = st.number_input("Exercises per day", 1, 10, 4, key="ga_exercises_per_day")
+        total_exercises = int(days) * int(exercises_per_day)
+        st.caption(f"Total exercises: {total_exercises}")
         max_cycles = st.number_input("Number of cycles", 10, 1000, 100, step=10, key="ga_max_cycles")
 
         st.markdown("**Population**")
@@ -215,8 +227,13 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
         submitted = st.form_submit_button("▶️ Run GA", width='stretch')
         if not submitted:
             return None
+        if total_exercises < 3 or total_exercises > 30:
+            st.sidebar.error("Total exercises must be between 3 and 30.")
+            return None
         return {
-            "num_exercises": int(num_exercises),
+            "num_exercises": total_exercises,
+            "days": int(days),
+            "exercises_per_day": int(exercises_per_day),
             "max_cycles": int(max_cycles),
             "population_size": int(population_size),
             "elite_count": int(elite_count),
@@ -498,6 +515,11 @@ def params_from_metadata(metadata: dict) -> dict:
     return {}
 
 
+def filter_params_for_callable(callable_obj, params: dict) -> dict:
+    signature = inspect.signature(callable_obj)
+    return {key: value for key, value in params.items() if key in signature.parameters}
+
+
 def main():
     st.set_page_config(layout="wide", page_title="Workout Algorithm Dashboard")
     st.title("Workout Algorithm Dashboard")
@@ -519,7 +541,7 @@ def main():
                 )
             if new_params is not None:
                 with st.spinner("Running Bees Algorithm…"):
-                    run_ba(**new_params)
+                    run_ba(**filter_params_for_callable(run_ba, new_params))
                 st.sidebar.success("Done - results reloaded.")
     else:
         new_params = ga_parameters_form(popular_muscles)
@@ -533,7 +555,7 @@ def main():
                 )
             if new_params is not None:
                 with st.spinner("Running Genetic Algorithm…"):
-                    run_ga(**new_params)
+                    run_ga(**filter_params_for_callable(run_ga, new_params))
                 st.sidebar.success("Done - results reloaded.")
 
     if not history_path.exists():
@@ -633,6 +655,44 @@ def main():
             ),
         },
     )
+
+    daily_plans = cycle_data.get("daily_plans")
+    if isinstance(daily_plans, list) and daily_plans:
+        st.header("Per-Day Plan")
+        day_labels = [f"Day {day_data['day']}" for day_data in daily_plans]
+        selected_day_label = st.selectbox("Select day", day_labels)
+        selected_day = day_labels.index(selected_day_label)
+        day_data = daily_plans[selected_day]
+
+        st.subheader(f"{selected_day_label} Muscle Activation")
+        day_body_model = MuscleMapReal(gender=body_gender, figsize=(14, 8))
+        day_body_model.apply_muscle_intensity(day_data.get("intensity_by_muscle", []))
+        day_body_model.fig.suptitle(
+            f"{selected_day_label} - Muscle Activation Heatmap ({gender})",
+            fontsize=16,
+            weight="bold",
+        )
+        st.pyplot(day_body_model.fig)
+
+        st.subheader(f"{selected_day_label} Exercises")
+        day_names = day_data.get("exercise_names", [])
+        day_plan = day_data.get("exercise_ids", [])
+        day_urls = day_data.get("exercise_urls", [""] * len(day_names))
+        st.dataframe(
+            pd.DataFrame({
+                "#": range(1, len(day_names) + 1),
+                "Exercise ID": day_plan,
+                "Exercise": day_names,
+                "Link": day_urls,
+            }),
+            width='stretch',
+            hide_index=True,
+            column_config={
+                "Link": st.column_config.LinkColumn(
+                    "Link", display_text="ExRx →", help="Open exercise description on ExRx.net"
+                ),
+            },
+        )
 
     # Muscle intensity details
     st.header("Muscle Activation Details")
