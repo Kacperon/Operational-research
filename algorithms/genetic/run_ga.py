@@ -12,6 +12,10 @@ from algorithms.genetic.genetic import Genetic
 from algorithms.distribute_exercises.distribute_exercises_ilp import DistributeExercisesILP
 from data.data_loader import DataLoader
 from planner.planner import Planner
+from utils.utils import create_logger
+
+
+logger = create_logger(__name__)
 
 
 def _build_intensity_by_muscle(planner: Planner, plan_indices: np.ndarray) -> list[dict[str, Any]]:
@@ -75,6 +79,13 @@ def run_ga(
     output_dir: str = "algorithms/genetic/results",
 ) -> Path:
     """Run GA and save history in BA-compatible JSON schema."""
+    logger.info(
+        "Starting GA run: num_exercises=%s days=%s exercises_per_day=%s max_cycles=%s",
+        num_exercises,
+        days,
+        exercises_per_day,
+        max_cycles,
+    )
     if (days is None) ^ (exercises_per_day is None):
         raise ValueError("days and exercises_per_day must be provided together.")
     if days is not None and exercises_per_day is not None:
@@ -90,6 +101,7 @@ def run_ga(
 
     loader = DataLoader(csv_path)
     exercises_array = loader.exercises()
+    logger.info("Loaded exercises: count=%s source=%s", len(exercises_array), csv_path)
     planner_intensity_weights = np.asarray(intensity_weights, dtype=np.float32).reshape(3, 1)
     planner = Planner(
         exercises_array,
@@ -146,7 +158,6 @@ def run_ga(
 
     history_data = {
         "metadata": {
-            "num_exercises": num_exercises,
             "days": int(days) if days is not None else None,
             "exercises_per_day": int(exercises_per_day) if exercises_per_day is not None else None,
             "num_cycles": max_cycles,
@@ -171,25 +182,17 @@ def run_ga(
         "cycles": [],
     }
 
+    # Find best individual from final cycle
+    final_costs = cost_history[-1]
+    final_best_idx = int(np.argmin(final_costs))
+    final_best_individual = population_history[-1][final_best_idx]
+
     for cycle_idx in range(max_cycles):
         cycle_population = population_history[cycle_idx]
         costs = cost_history[cycle_idx]
         best_idx = int(np.argmin(costs))
         best_individual = cycle_population[best_idx]
         intensity_by_muscle = _build_intensity_by_muscle(planner, best_individual)
-        daily_plans: list[dict[str, Any]] | None = None
-        daily_plans_error: str | None = None
-        if days is not None and exercises_per_day is not None:
-            try:
-                daily_plans = _build_daily_plans(
-                    planner,
-                    exercises_array,
-                    best_individual,
-                    days=int(days),
-                    max_targets_per_day=int(max_targets_per_day),
-                )
-            except RuntimeError as exc:
-                daily_plans_error = str(exc)
 
         cycle_data = {
             "cycle": cycle_idx + 1,
@@ -206,17 +209,37 @@ def run_ga(
             "max_cost": float(np.max(costs)),
             "intensity_by_muscle": intensity_by_muscle,
         }
-        if daily_plans is not None:
-            cycle_data["daily_plans"] = daily_plans
-        if daily_plans_error is not None:
-            cycle_data["daily_plans_error"] = daily_plans_error
         history_data["cycles"].append(cycle_data)
+
+    # Perform exercise split once on final best individual
+    if days is not None and exercises_per_day is not None:
+        try:
+            final_daily_plans = _build_daily_plans(
+                planner,
+                exercises_array,
+                final_best_individual,
+                days=int(days),
+                max_targets_per_day=int(max_targets_per_day),
+            )
+            history_data["metadata"]["daily_plans"] = final_daily_plans
+            logger.info("Final exercise split completed: %d days planned", len(final_daily_plans))
+        except (RuntimeError, ValueError) as exc:
+            history_data["metadata"]["daily_plans_error"] = str(exc)
+            logger.warning("Final exercise split skipped: %s", str(exc))
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     history_file = output_path / "ga_full_history.json"
     with open(history_file, "w") as f:
         json.dump(history_data, f, indent=2, ensure_ascii=False)
+
+    logger.info(
+        "GA completed: cycles=%s best_cost=%.6f total_fitness_evals=%s",
+        max_cycles,
+        float(best_cost_history[-1]) if best_cost_history else float("nan"),
+        int(planner.fitness_evaluations),
+    )
+    logger.info("GA history saved: %s", history_file)
 
     return history_file
 

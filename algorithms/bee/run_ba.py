@@ -11,6 +11,10 @@ from algorithms.bee.bee_algorithm import BeeAlgorithm
 from algorithms.distribute_exercises.distribute_exercises_ilp import DistributeExercisesILP
 from planner.planner import Planner
 from data.data_loader import DataLoader
+from utils.utils import create_logger
+
+
+logger = create_logger(__name__)
 
 
 def _build_intensity_by_muscle(planner: Planner, plan_indices: np.ndarray) -> list[dict[str, Any]]:
@@ -76,6 +80,13 @@ def run_ba(
     output_dir: str = "algorithms/bee/results",
 ) -> Path:
     """Run BA and save history to JSON."""
+    logger.info(
+        "Starting BA run: num_exercises=%s days=%s exercises_per_day=%s max_cycles=%s",
+        num_exercises,
+        days,
+        exercises_per_day,
+        max_cycles,
+    )
 
     if (days is None) ^ (exercises_per_day is None):
         raise ValueError("days and exercises_per_day must be provided together.")
@@ -93,6 +104,7 @@ def run_ba(
 
     loader = DataLoader(csv_path)
     exercises_array = loader.exercises()
+    logger.info("Loaded exercises: count=%s source=%s", len(exercises_array), csv_path)
     planner_intensity_weights = np.asarray(intensity_weights, dtype=np.float32).reshape(3, 1)
     planner = Planner(
         exercises_array,
@@ -123,10 +135,15 @@ def run_ba(
     )
 
     result = ba.run(num_exercises_to_plan=num_exercises, max_cycles=max_cycles)
+    logger.info(
+        "BA completed: cycles=%s best_cost=%.6f total_fitness_evals=%s",
+        len(result.best_cost_history),
+        float(result.best_cost),
+        int(result.total_fitness_evals),
+    )
 
     history_data = {
         "metadata": {
-            "num_exercises": num_exercises,
             "days": int(days) if days is not None else None,
             "exercises_per_day": int(exercises_per_day) if exercises_per_day is not None else None,
             "num_cycles": len(result.best_cost_history),
@@ -160,19 +177,6 @@ def run_ba(
         best_idx = int(np.argmin(costs))
         best_individual = population[best_idx]
         intensity_by_muscle = _build_intensity_by_muscle(planner, best_individual)
-        daily_plans: list[dict[str, Any]] | None = None
-        daily_plans_error: str | None = None
-        if days is not None and exercises_per_day is not None:
-            try:
-                daily_plans = _build_daily_plans(
-                    planner,
-                    exercises_array,
-                    best_individual,
-                    days=int(days),
-                    max_targets_per_day=int(max_targets_per_day),
-                )
-            except RuntimeError as exc:
-                daily_plans_error = str(exc)
 
         cycle_data = {
             "cycle": int(cycle_idx) + 1,
@@ -189,17 +193,31 @@ def run_ba(
             "max_cost": float(np.max(costs)),
             "intensity_by_muscle": intensity_by_muscle,
         }
-        if daily_plans is not None:
-            cycle_data["daily_plans"] = daily_plans
-        if daily_plans_error is not None:
-            cycle_data["daily_plans_error"] = daily_plans_error
         history_data["cycles"].append(cycle_data)
+
+    # Perform exercise split once on final best individual
+    if days is not None and exercises_per_day is not None:
+        try:
+            final_daily_plans = _build_daily_plans(
+                planner,
+                exercises_array,
+                result.best_individual,
+                days=int(days),
+                max_targets_per_day=int(max_targets_per_day),
+            )
+            history_data["metadata"]["daily_plans"] = final_daily_plans
+            logger.info("Final exercise split completed: %d days planned", len(final_daily_plans))
+        except (RuntimeError, ValueError) as exc:
+            history_data["metadata"]["daily_plans_error"] = str(exc)
+            logger.warning("Final exercise split skipped: %s", str(exc))
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     history_file = output_path / "ba_full_history.json"
     with open(history_file, "w") as f:
         json.dump(history_data, f, indent=2, ensure_ascii=False)
+
+    logger.info("BA history saved: %s", history_file)
 
     return history_file
 

@@ -1,5 +1,9 @@
 import numpy as np
 from planner.exercise import Exercise
+from utils.utils import create_logger
+
+
+logger = create_logger(__name__)
 
 class Planner:
     def __init__(
@@ -108,6 +112,12 @@ class Planner:
         weighted_groups = self.intensity_weights.T @ intensity_matrix
         weighted_groups_avg = np.mean(weighted_groups)
         fitness_value = self.balance_weight * np.linalg.norm(weighted_groups_avg - weighted_groups) - float((weighted_groups @ self.muscle_group_weights).sum())
+        if not np.isfinite(fitness_value):
+            logger.warning(
+                "Non-finite fitness detected: value=%s weighted_groups_avg=%s",
+                fitness_value,
+                weighted_groups_avg,
+            )
         self.fitness_evaluations += 1
 
         return float(fitness_value)

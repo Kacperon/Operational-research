@@ -20,12 +20,14 @@ class ColorFormatter(logging.Formatter):
         finally:
             record.levelname = level
 
-def create_logger(name=__name__, level=logging.INFO) -> logging.Logger:
+def create_logger(name=__name__, level=logging.DEBUG) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    formatter = ColorFormatter("%(asctime)s  [%(levelname)s] %(message)s")
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    if not logger.handlers:
+        formatter = ColorFormatter("%(asctime)s  [%(levelname)s] %(message)s")
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    logger.propagate = False
 
     return logger

@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from algorithms.bee.run_ba import run_ba
 from algorithms.genetic.run_ga import run_ga
+from algorithms.distribute_exercises.distribute_exercises_ilp import DistributeExercisesILP
 from vizualization.musclemap_real import MuscleMapReal, BodyGender
 from data.data_loader import DataLoader
 from planner.planner import Planner
@@ -656,8 +657,8 @@ def main():
         },
     )
 
-    daily_plans = cycle_data.get("daily_plans")
-    daily_plans_error = cycle_data.get("daily_plans_error")
+    daily_plans = metadata.get("daily_plans")
+    daily_plans_error = metadata.get("daily_plans_error")
     if isinstance(daily_plans, list) and daily_plans:
         st.header("Per-Day Plan")
         day_rows: list[dict[str, object]] = []
@@ -709,11 +710,29 @@ def main():
         day_names = day_data.get("exercise_names", [])
         day_plan = day_data.get("exercise_ids", [])
         day_urls = day_data.get("exercise_urls", [""] * len(day_names))
+
+        # Load exercises to get target muscles
+        csv_path = Path("data/exrx_exercises_muscles_clean.csv")
+        if not csv_path.exists():
+            csv_path = Path("data/exrx_exercises_muscles_with_body_part.csv")
+        loader = DataLoader(csv_path)
+        exercises_array = loader.exercises()
+
+        # Map exercise IDs to target muscles
+        day_targets: list[str] = []
+        for ex_id in day_plan:
+            if 0 <= ex_id < len(exercises_array):
+                targets = exercises_array[int(ex_id)].targets
+                day_targets.append(", ".join(targets) if targets else "N/A")
+            else:
+                day_targets.append("N/A")
+
         st.dataframe(
             pd.DataFrame({
                 "#": range(1, len(day_names) + 1),
                 "Exercise ID": day_plan,
                 "Exercise": day_names,
+                "Target Muscles": day_targets,
                 "Link": day_urls,
             }),
             width='stretch',
