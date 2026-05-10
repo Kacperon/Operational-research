@@ -124,6 +124,8 @@ def run_ga(
             "exercise_names": [exercises_array[int(idx)].name for idx in best_individual],
             "exercise_urls": [exercises_array[int(idx)].url for idx in best_individual],
             "population_size": int(len(cycle_population)),
+            "population": cycle_population.astype(int).tolist(),
+            "population_costs": [float(c) for c in costs],
             "avg_cost": float(np.mean(costs)),
             "min_cost": float(np.min(costs)),
             "max_cost": float(np.max(costs)),

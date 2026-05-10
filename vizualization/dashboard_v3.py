@@ -260,24 +260,31 @@ def _build_exercise_muscle_matrix(normalize_helper_muscles: bool) -> tuple[np.nd
 
 
 @st.cache_data(show_spinner=False)
-def compute_swarm_embedding(history_path_str: str, file_mtime: float) -> dict | None:
-    """PCA-project bee plans into 2D, fitting axes only on selected sites.
+def compute_swarm_embedding(history_path_str: str, file_mtime: float, algorithm: str) -> dict | None:
+    """PCA-project plans into 2D for both BA and GA.
 
-    Bee Algorithm structure: in each saved cycle, indices [:selected_sites] are
-    the bees produced by neighborhood search around the previous best sites
-    ("the colony"), and [selected_sites:] are fresh random scouts. The PCA is
-    fit on the colony only so the axes capture the meaningful trajectory rather
-    than the scouts' uniform-random noise that dominates the population.
+    BA: indices [:selected_sites] = colony (neighborhood-searched), [selected_sites:] = scouts.
+        PCA is fit on the colony only — scouts are uniform-random and would otherwise
+        dominate the principal axes.
+    GA: the entire population is "the colony" (no scouts; all individuals descend from
+        the previous generation via crossover/mutation). PCA is fit on the whole population.
     """
     history = json.load(open(history_path_str))
     cycles = history["cycles"]
     if not cycles or "population" not in cycles[0]:
         return None
 
-    ba_params = history["metadata"].get("ba_params", {})
-    normalize = bool(ba_params.get("normalize_helper_muscles", True))
-    selected_sites = int(ba_params.get("selected_sites", 12))
-    elite_sites = int(ba_params.get("elite_sites", 4))
+    metadata = history["metadata"]
+    if algorithm == "BA":
+        params = metadata.get("ba_params", {})
+        normalize = bool(params.get("normalize_helper_muscles", True))
+        elite_count = int(params.get("elite_sites", 4))
+        colony_size: int | None = int(params.get("selected_sites", 12))
+    else:  # GA
+        params = metadata.get("ga_params", {})
+        normalize = bool(params.get("normalize_helper_muscles", True))
+        elite_count = int(params.get("elite_count", 4))
+        colony_size = None  # whole population
 
     M, _ = _build_exercise_muscle_matrix(normalize)
 
@@ -287,9 +294,9 @@ def compute_swarm_embedding(history_path_str: str, file_mtime: float) -> dict | 
 
     plan_vectors = M[populations].sum(axis=2)  # (C, P, muscles)
 
-    selected = plan_vectors[:, :selected_sites, :].reshape(-1, M.shape[1])
-    mean = selected.mean(axis=0, keepdims=True)
-    _, sv, vt = np.linalg.svd(selected - mean, full_matrices=False)
+    fit_subset = plan_vectors[:, :colony_size, :].reshape(-1, M.shape[1]) if colony_size else plan_vectors.reshape(-1, M.shape[1])
+    mean = fit_subset.mean(axis=0, keepdims=True)
+    _, sv, vt = np.linalg.svd(fit_subset - mean, full_matrices=False)
     components = vt[:2]
 
     flat = plan_vectors.reshape(-1, M.shape[1]) - mean
@@ -298,10 +305,11 @@ def compute_swarm_embedding(history_path_str: str, file_mtime: float) -> dict | 
 
     best_idx_per_cycle = np.argmin(costs, axis=1)
     best_costs = costs[np.arange(num_cycles), best_idx_per_cycle]
-    centroid_positions = coords[:, :selected_sites, :].mean(axis=1)
+    if colony_size:
+        centroid_positions = coords[:, :colony_size, :].mean(axis=1)
+    else:
+        centroid_positions = coords.mean(axis=1)
 
-    # Rolling global best — position only moves when a new record is set, so
-    # the trail is monotonic in cost and visibly directional.
     global_best_positions = np.empty((num_cycles, 2), dtype=np.float32)
     global_best_costs = np.empty(num_cycles, dtype=np.float32)
     record_cost = np.inf
@@ -323,15 +331,17 @@ def compute_swarm_embedding(history_path_str: str, file_mtime: float) -> dict | 
         "global_best_positions": global_best_positions.tolist(),
         "global_best_costs": global_best_costs.tolist(),
         "explained": explained,
-        "selected_sites": selected_sites,
-        "elite_sites": elite_sites,
+        "elite_count": elite_count,
+        "colony_size": colony_size if colony_size is not None else pop_size,
+        "has_scouts": colony_size is not None and colony_size < pop_size,
+        "algorithm": algorithm,
     }
 
 
-def render_swarm_trajectory(history: dict, history_path: Path) -> None:
-    embedding = compute_swarm_embedding(str(history_path), history_path.stat().st_mtime)
+def render_swarm_trajectory(history: dict, history_path: Path, algorithm: str) -> None:
+    embedding = compute_swarm_embedding(str(history_path), history_path.stat().st_mtime, algorithm)
     if embedding is None:
-        st.info("Run the Bees Algorithm to populate the swarm trajectory view (this run was saved without per-cycle populations — re-run BA from the sidebar).")
+        st.info(f"Run {algorithm} to populate the trajectory view — re-run from the sidebar so per-cycle populations are saved.")
         return
 
     coords = np.array(embedding["coords"])
@@ -340,87 +350,86 @@ def render_swarm_trajectory(history: dict, history_path: Path) -> None:
     global_best_positions = np.array(embedding["global_best_positions"])
     global_best_costs = np.array(embedding["global_best_costs"])
     ev1, ev2 = embedding["explained"]
-    selected_sites = int(embedding["selected_sites"])
-    elite_sites = int(embedding["elite_sites"])
-    num_cycles, _, _ = coords.shape
+    elite_count = int(embedding["elite_count"])
+    colony_size = int(embedding["colony_size"])
+    has_scouts = bool(embedding["has_scouts"])
+    num_cycles, pop_size, _ = coords.shape
 
-    selected_costs = costs[:, :selected_sites]
-    cmin, cmax = float(selected_costs.min()), float(selected_costs.max())
+    rest_label = "selected" if has_scouts else "offspring"
+    centroid_label = "colony centroid trail" if algorithm == "BA" else "population centroid trail"
+
+    colony_costs = costs[:, :colony_size]
+    cmin, cmax = float(colony_costs.min()), float(colony_costs.max())
 
     frames = []
     for c in range(num_cycles):
-        elite_xy = coords[c, :elite_sites]
-        sel_xy = coords[c, elite_sites:selected_sites]
-        scout_xy = coords[c, selected_sites:]
+        elite_xy = coords[c, :elite_count]
+        rest_xy = coords[c, elite_count:colony_size]
+        scout_xy = coords[c, colony_size:] if has_scouts else None
 
-        elite_costs = costs[c, :elite_sites]
-        sel_only_costs = costs[c, elite_sites:selected_sites]
+        elite_c = costs[c, :elite_count]
+        rest_c = costs[c, elite_count:colony_size]
 
-        frames.append(go.Frame(
-            name=str(c + 1),
-            data=[
-                # 0: scouts — random exploration
-                go.Scatter(
-                    x=scout_xy[:, 0], y=scout_xy[:, 1],
-                    mode="markers",
-                    marker=dict(size=5, color="rgba(160,160,200,0.45)",
-                                line=dict(width=0)),
-                    hoverinfo="skip",
-                    showlegend=(c == 0), name="scouts",
-                ),
-                # 1: centroid trail — smooth motion of the colony
-                go.Scatter(
-                    x=centroid_positions[: c + 1, 0], y=centroid_positions[: c + 1, 1],
-                    mode="lines",
-                    line=dict(color="rgba(0, 220, 255, 0.55)", width=2, dash="dot"),
-                    hoverinfo="skip",
-                    showlegend=(c == 0), name="colony centroid trail",
-                ),
-                # 2: rolling global-best trail (monotonic — moves only on a new record)
-                go.Scatter(
-                    x=global_best_positions[: c + 1, 0], y=global_best_positions[: c + 1, 1],
-                    mode="lines",
-                    line=dict(color="rgba(255, 195, 0, 0.9)", width=3.2, shape="hv"),
-                    hoverinfo="skip",
-                    showlegend=(c == 0), name="global best trail",
-                ),
-                # 3: selected (non-elite) sites
-                go.Scatter(
-                    x=sel_xy[:, 0], y=sel_xy[:, 1],
-                    mode="markers",
-                    marker=dict(size=12, color=sel_only_costs, colorscale="Viridis_r",
-                                cmin=cmin, cmax=cmax,
-                                line=dict(color="rgba(255,255,255,0.6)", width=0.8),
-                                showscale=False),
-                    customdata=sel_only_costs.reshape(-1, 1),
-                    hovertemplate="selected · cost %{customdata[0]:.3f}<extra></extra>",
-                    showlegend=(c == 0), name="selected sites",
-                ),
-                # 4: elite sites (top of selected — get most recruits)
-                go.Scatter(
-                    x=elite_xy[:, 0], y=elite_xy[:, 1],
-                    mode="markers",
-                    marker=dict(size=18, color=elite_costs, colorscale="Viridis_r",
-                                cmin=cmin, cmax=cmax,
-                                symbol="hexagon",
-                                line=dict(color="white", width=1.4),
-                                colorbar=dict(title="Cost",
-                                              len=0.7, thickness=14)),
-                    customdata=elite_costs.reshape(-1, 1),
-                    hovertemplate="elite · cost %{customdata[0]:.3f}<extra></extra>",
-                    showlegend=(c == 0), name="elite sites",
-                ),
-                # 5: global best ever (sticky — moves only on a new record)
-                go.Scatter(
-                    x=[global_best_positions[c, 0]], y=[global_best_positions[c, 1]],
-                    mode="markers",
-                    marker=dict(symbol="star", size=26, color="gold",
-                                line=dict(color="black", width=1.4)),
-                    hovertemplate=f"global best so far<br>cost {global_best_costs[c]:.3f}<extra></extra>",
-                    showlegend=(c == 0), name="global best",
-                ),
-            ],
-        ))
+        frame_data = []
+
+        if has_scouts:
+            frame_data.append(go.Scatter(
+                x=scout_xy[:, 0], y=scout_xy[:, 1],
+                mode="markers",
+                marker=dict(size=5, color="rgba(160,160,200,0.45)", line=dict(width=0)),
+                hoverinfo="skip",
+                showlegend=(c == 0), name="scouts",
+            ))
+
+        frame_data += [
+            go.Scatter(
+                x=centroid_positions[: c + 1, 0], y=centroid_positions[: c + 1, 1],
+                mode="lines",
+                line=dict(color="rgba(0, 220, 255, 0.55)", width=2, dash="dot"),
+                hoverinfo="skip",
+                showlegend=(c == 0), name=centroid_label,
+            ),
+            go.Scatter(
+                x=global_best_positions[: c + 1, 0], y=global_best_positions[: c + 1, 1],
+                mode="lines",
+                line=dict(color="rgba(255, 195, 0, 0.9)", width=3.2, shape="hv"),
+                hoverinfo="skip",
+                showlegend=(c == 0), name="global best trail",
+            ),
+            go.Scatter(
+                x=rest_xy[:, 0], y=rest_xy[:, 1],
+                mode="markers",
+                marker=dict(size=12, color=rest_c, colorscale="Viridis_r",
+                            cmin=cmin, cmax=cmax,
+                            line=dict(color="rgba(255,255,255,0.6)", width=0.8),
+                            showscale=False),
+                customdata=rest_c.reshape(-1, 1),
+                hovertemplate=rest_label + " · cost %{customdata[0]:.3f}<extra></extra>",
+                showlegend=(c == 0), name=rest_label,
+            ),
+            go.Scatter(
+                x=elite_xy[:, 0], y=elite_xy[:, 1],
+                mode="markers",
+                marker=dict(size=18, color=elite_c, colorscale="Viridis_r",
+                            cmin=cmin, cmax=cmax,
+                            symbol="hexagon",
+                            line=dict(color="white", width=1.4),
+                            colorbar=dict(title="Cost", len=0.7, thickness=14)),
+                customdata=elite_c.reshape(-1, 1),
+                hovertemplate="elite · cost %{customdata[0]:.3f}<extra></extra>",
+                showlegend=(c == 0), name="elite",
+            ),
+            go.Scatter(
+                x=[global_best_positions[c, 0]], y=[global_best_positions[c, 1]],
+                mode="markers",
+                marker=dict(symbol="star", size=26, color="gold",
+                            line=dict(color="black", width=1.4)),
+                hovertemplate=f"global best so far<br>cost {global_best_costs[c]:.3f}<extra></extra>",
+                showlegend=(c == 0), name="global best",
+            ),
+        ]
+
+        frames.append(go.Frame(name=str(c + 1), data=frame_data))
 
     sx_min, sx_max = float(np.percentile(coords[..., 0], 1)), float(np.percentile(coords[..., 0], 99))
     sy_min, sy_max = float(np.percentile(coords[..., 1], 1)), float(np.percentile(coords[..., 1], 99))
@@ -429,9 +438,10 @@ def render_swarm_trajectory(history: dict, history_path: Path) -> None:
     x_range = [sx_min - pad_x, sx_max + pad_x]
     y_range = [sy_min - pad_y, sy_max + pad_y]
 
+    title_subject = "Bee Swarm" if algorithm == "BA" else "Population"
     fig = go.Figure(data=frames[0].data, frames=frames)
     fig.update_layout(
-        title=f"Bee Swarm Trajectory in Fitness Landscape — PCA on muscle-coverage  ·  PC1 {ev1*100:.1f}%, PC2 {ev2*100:.1f}%",
+        title=f"{title_subject} Trajectory in Fitness Landscape — PCA on muscle-coverage  ·  PC1 {ev1*100:.1f}%, PC2 {ev2*100:.1f}%",
         xaxis=dict(title="PC1", range=x_range, zeroline=False),
         yaxis=dict(title="PC2", range=y_range, zeroline=False, scaleanchor="x", scaleratio=1),
         height=640,
@@ -467,11 +477,18 @@ def render_swarm_trajectory(history: dict, history_path: Path) -> None:
     )
 
     st.plotly_chart(fig, use_container_width=True)
-    st.caption(
-        "⬢ hexagon — elite site  ·  ● circle — selected site  ·  · dot — scout  ·  "
-        "★ star — global best  ·  ┄ cyan dotted — colony centroid trail  ·  "
-        "─ gold step — global-best trail  ·  color — cost (brighter = better)"
-    )
+    if has_scouts:
+        st.caption(
+            "⬢ hexagon — elite site  ·  ● circle — selected site  ·  · dot — scout  ·  "
+            "★ star — global best  ·  ┄ cyan dotted — colony centroid trail  ·  "
+            "─ gold step — global-best trail  ·  color — cost (brighter = better)"
+        )
+    else:
+        st.caption(
+            "⬢ hexagon — elite (preserved across generations)  ·  ● circle — offspring  ·  "
+            "★ star — global best  ·  ┄ cyan dotted — population centroid trail  ·  "
+            "─ gold step — global-best trail  ·  color — cost (brighter = better)"
+        )
 
 
 def params_from_metadata(metadata: dict) -> dict:
@@ -562,9 +579,10 @@ def main():
     ax.legend(fontsize=11)
     st.pyplot(fig_cost)
 
-    if algorithm == "BA":
-        st.header("🐝 Bee Swarm Trajectory")
-        render_swarm_trajectory(history, history_path)
+    header_emoji = "🐝" if algorithm == "BA" else "🧬"
+    header_label = "Bee Swarm Trajectory" if algorithm == "BA" else "Population Trajectory"
+    st.header(f"{header_emoji} {header_label}")
+    render_swarm_trajectory(history, history_path, algorithm)
 
     # Cycle info
     st.header(f"Cycle {cycle_data['cycle']} Statistics")
