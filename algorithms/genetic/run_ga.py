@@ -178,14 +178,18 @@ def run_ga(
         best_individual = cycle_population[best_idx]
         intensity_by_muscle = _build_intensity_by_muscle(planner, best_individual)
         daily_plans: list[dict[str, Any]] | None = None
+        daily_plans_error: str | None = None
         if days is not None and exercises_per_day is not None:
-            daily_plans = _build_daily_plans(
-                planner,
-                exercises_array,
-                best_individual,
-                days=int(days),
-                max_targets_per_day=int(max_targets_per_day),
-            )
+            try:
+                daily_plans = _build_daily_plans(
+                    planner,
+                    exercises_array,
+                    best_individual,
+                    days=int(days),
+                    max_targets_per_day=int(max_targets_per_day),
+                )
+            except RuntimeError as exc:
+                daily_plans_error = str(exc)
 
         cycle_data = {
             "cycle": cycle_idx + 1,
@@ -204,6 +208,8 @@ def run_ga(
         }
         if daily_plans is not None:
             cycle_data["daily_plans"] = daily_plans
+        if daily_plans_error is not None:
+            cycle_data["daily_plans_error"] = daily_plans_error
         history_data["cycles"].append(cycle_data)
 
     output_path = Path(output_dir)

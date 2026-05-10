@@ -657,8 +657,39 @@ def main():
     )
 
     daily_plans = cycle_data.get("daily_plans")
+    daily_plans_error = cycle_data.get("daily_plans_error")
     if isinstance(daily_plans, list) and daily_plans:
         st.header("Per-Day Plan")
+        day_rows: list[dict[str, object]] = []
+        for day_data in daily_plans:
+            day_label = f"Day {day_data['day']}"
+            day_names = day_data.get("exercise_names", [])
+            day_ids = day_data.get("exercise_ids", [])
+            day_urls = day_data.get("exercise_urls", [""] * len(day_names))
+            for idx, name in enumerate(day_names):
+                day_rows.append(
+                    {
+                        "Day": day_label,
+                        "#": idx + 1,
+                        "Exercise ID": day_ids[idx] if idx < len(day_ids) else "",
+                        "Exercise": name,
+                        "Link": day_urls[idx] if idx < len(day_urls) else "",
+                    }
+                )
+
+        st.subheader("All Days Overview")
+        if day_rows:
+            st.dataframe(
+                pd.DataFrame(day_rows),
+                width='stretch',
+                hide_index=True,
+                column_config={
+                    "Link": st.column_config.LinkColumn(
+                        "Link", display_text="ExRx →", help="Open exercise description on ExRx.net"
+                    ),
+                },
+            )
+
         day_labels = [f"Day {day_data['day']}" for day_data in daily_plans]
         selected_day_label = st.selectbox("Select day", day_labels)
         selected_day = day_labels.index(selected_day_label)
@@ -693,6 +724,8 @@ def main():
                 ),
             },
         )
+    elif isinstance(daily_plans_error, str) and daily_plans_error:
+        st.warning(f"Per-day split unavailable: {daily_plans_error}")
 
     # Muscle intensity details
     st.header("Muscle Activation Details")
