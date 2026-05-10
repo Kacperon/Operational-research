@@ -101,7 +101,7 @@ def render_vector_param(
         if changed.empty:
             st.caption("All weights use default value.")
         else:
-            st.dataframe(changed.sort_values("weight", ascending=False), use_container_width=True, hide_index=True)
+            st.dataframe(changed.sort_values("weight", ascending=False), width='stretch', hide_index=True)
 
 
 def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
@@ -147,7 +147,7 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42)
 
-        submitted = st.form_submit_button("▶️ Run BA", use_container_width=True)
+        submitted = st.form_submit_button("▶️ Run BA", width='stretch')
         if not submitted:
             return None
         return {
@@ -212,7 +212,7 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42, key="ga_seed")
 
-        submitted = st.form_submit_button("▶️ Run GA", use_container_width=True)
+        submitted = st.form_submit_button("▶️ Run GA", width='stretch')
         if not submitted:
             return None
         return {
@@ -625,7 +625,7 @@ def main():
             "Exercise": names,
             "Link": urls,
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             "Link": st.column_config.LinkColumn(
@@ -641,7 +641,7 @@ def main():
         muscle_df = muscle_df.sort_values("total_intensity", ascending=False)
         st.dataframe(
             muscle_df[["muscle", "target_count", "synergist_count", "stabilizer_count", "total_intensity"]].head(20),
-            use_container_width=True,
+            width='stretch',
         )
 
 
