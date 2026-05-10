@@ -9,6 +9,7 @@ class Planner:
             muscle_group_weights: np.ndarray | None = None,
             intensity_weights: np.ndarray | None = None,
             balance_weight: float = 1.0,
+            normalize_helper_muscles: bool = True,
         ) -> None:
         """
         Initializes the Planner class with the given parameters.
@@ -25,6 +26,8 @@ class Planner:
                 defaults to ones.
             balance_weight (float): Weight for the balance term in the fitness
                 function.
+            normalize_helper_muscles (bool): If True, split synergist and
+                stabilizer contribution equally across the muscles in each role.
         """
         self.exercises = exercises
 
@@ -39,6 +42,7 @@ class Planner:
         self.muscle_group_weights = muscle_group_weights if muscle_group_weights is not None else np.ones(shape=(self.num_muscle_groups, 1), dtype=np.float32)
         self.intensity_weights = intensity_weights if intensity_weights is not None else np.ones(shape=(3, 1), dtype=np.float32)
         self.balance_weight = balance_weight
+        self.normalize_helper_muscles = normalize_helper_muscles
         self.fitness_evaluations = 0
 
     @staticmethod
@@ -109,17 +113,24 @@ class Planner:
         return float(fitness_value)
 
     def get_intensity_matrix(self, individual: np.ndarray[int]):
-        intensity_matrix = np.zeros(shape=(3, self.num_muscle_groups), dtype=np.int32)
+        intensity_matrix = np.zeros(shape=(3, self.num_muscle_groups), dtype=np.float32)
         for exercise_idx in individual:
             exercise: Exercise = self.exercises[exercise_idx]
+
             for muscle_group in exercise.targets:
                 muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
                 intensity_matrix[0, muscle_idx] += 1
-            for muscle_group in exercise.synergists:
-                muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
-                intensity_matrix[1, muscle_idx] += 1
-            for muscle_group in exercise.stabilizers:
-                muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
-                intensity_matrix[2, muscle_idx] += 1
+
+            if exercise.synergists:
+                synergist_share = 1.0 / len(exercise.synergists) if self.normalize_helper_muscles else 1.0
+                for muscle_group in exercise.synergists:
+                    muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
+                    intensity_matrix[1, muscle_idx] += synergist_share
+
+            if exercise.stabilizers:
+                stabilizer_share = 1.0 / len(exercise.stabilizers) if self.normalize_helper_muscles else 1.0
+                for muscle_group in exercise.stabilizers:
+                    muscle_idx = self.muscle_group2idx[self._normalize_muscle_name(muscle_group)]
+                    intensity_matrix[2, muscle_idx] += stabilizer_share
 
         return intensity_matrix

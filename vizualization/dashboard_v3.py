@@ -140,6 +140,9 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
                 )
             )
 
+        st.markdown("**Muscle contribution**")
+        normalize_helper_muscles = st.checkbox("Normalize helper muscle contributions", value=True)
+
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42)
 
@@ -162,6 +165,7 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
                 float(ba_stabilizer_weight),
             ),
             "preset_muscle_group_weights": ba_preset_muscle_weights,
+            "normalize_helper_muscles": bool(normalize_helper_muscles),
             "random_seed": int(seed),
         }
 
@@ -201,6 +205,9 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
                 )
             )
 
+        st.markdown("**Muscle contribution**")
+        normalize_helper_muscles = st.checkbox("Normalize helper muscle contributions", value=True, key="ga_normalize_helper")
+
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42, key="ga_seed")
 
@@ -221,6 +228,7 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
                 float(ga_stabilizer_weight),
             ),
             "preset_muscle_group_weights": ga_preset_muscle_weights,
+            "normalize_helper_muscles": bool(normalize_helper_muscles),
             "random_seed": int(seed),
         }
 
