@@ -65,7 +65,7 @@ def run_ga(
     num_exercises: int = 10,
     days: int | None = None,
     exercises_per_day: int | None = None,
-    max_targets_per_day: int = 3,
+    max_targets_per_day: int = 5,
     max_cycles: int = 100,
     population_size: int = 60,
     elite_count: int = 4,

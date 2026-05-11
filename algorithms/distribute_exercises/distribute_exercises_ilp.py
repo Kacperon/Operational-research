@@ -64,7 +64,7 @@ class DistributeExercisesILP:
         self,
         planner: Planner,
         days: int,
-        max_targets_per_day: int = 3,
+        max_targets_per_day: int = 5,
     ) -> None:
         self.planner = planner
         self.days = days
@@ -151,8 +151,7 @@ class DistributeExercisesILP:
         Raises
         ------
         ValueError
-            If ``n`` is not divisible by ``self.days`` or if the ILP is
-            infeasible (e.g. ``max_targets_per_day`` is too restrictive).
+            If ``n`` is not divisible by ``self.days``.
         RuntimeError
             If no supported MILP solver is available.
         """
@@ -168,6 +167,37 @@ class DistributeExercisesILP:
                 f"Number of exercises ({n}) must be divisible by "
                 f"days ({self.days})."
             )
+        
+        # Try MILP with auto-relaxation on infeasibility
+        max_targets = self.max_targets_per_day
+        max_attempts = 5
+        
+        for attempt in range(max_attempts):
+            try:
+                result = self._solve_ilp(exercise_indices, max_targets)
+                logger.debug(
+                    "ILP succeeded with max_targets_per_day=%s (attempt=%s)",
+                    max_targets,
+                    attempt + 1,
+                )
+                return result
+            except RuntimeError as exc:
+                if "infeasible" in str(exc).lower() and attempt < max_attempts - 1:
+                    max_targets += 1
+                    logger.warning(
+                        "ILP infeasible with max_targets_per_day=%s, relaxing to %s",
+                        max_targets - 1,
+                        max_targets,
+                    )
+                    continue
+                # Last attempt or non-infeasibility error: re-raise
+                raise
+
+    def _solve_ilp(self, exercise_indices: np.ndarray, max_targets_per_day: int) -> list[np.ndarray]:
+        """
+        Internal MILP solver with specified max_targets_per_day.
+        """
+        n = len(exercise_indices)
         p = n // self.days
 
         # Cost-function parameters from the Planner
@@ -205,7 +235,7 @@ class DistributeExercisesILP:
             # C2: every day has exactly p exercises
             cp.sum(z, axis=0) == p,
             # C3: at most max_targets_per_day distinct target groups per day
-            cp.sum(y, axis=0) <= self.max_targets_per_day,
+            cp.sum(y, axis=0) <= max_targets_per_day,
             # C4: if any exercise with target t is on day d, y[t, d] must be 1
             #     LHS ≤ p guarantees that a single active exercise forces y = 1
             target_ind.T @ z <= p * y,
@@ -266,11 +296,10 @@ class DistributeExercisesILP:
             logger.error("ILP finished without solution after solve: status=%s", problem.status)
             raise ValueError(
                 f"ILP returned no solution (status: {problem.status}). "
-                "The problem may be infeasible - try increasing "
-                "max_targets_per_day or reducing the number of days."
+                "The problem may be infeasible."
             )
 
         # Map the (n, days) assignment matrix back to per-day index lists
         assignment = np.argmax(np.round(z.value).astype(int), axis=1)  # (n,)
-        logger.debug("ILP split completed successfully")
+        logger.debug("ILP split completed successfully with max_targets_per_day=%s", max_targets_per_day)
         return [exercise_indices[assignment == d] for d in range(self.days)]

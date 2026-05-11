@@ -115,6 +115,7 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
         total_exercises = int(days) * int(exercises_per_day)
         st.caption(f"Total exercises: {total_exercises}")
         max_cycles = st.number_input("Number of cycles", 10, 1000, 100, step=10)
+        max_targets_per_day = st.number_input("Max target muscles per day", 1, 20, 5)
 
         st.markdown("**Population**")
         population_size = st.number_input("Population size", 10, 500, 60, step=10)
@@ -163,6 +164,7 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
             "days": int(days),
             "exercises_per_day": int(exercises_per_day),
             "max_cycles": int(max_cycles),
+            "max_targets_per_day": int(max_targets_per_day),
             "population_size": int(population_size),
             "selected_sites": int(selected_sites),
             "elite_sites": int(elite_sites),
@@ -190,6 +192,7 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
         total_exercises = int(days) * int(exercises_per_day)
         st.caption(f"Total exercises: {total_exercises}")
         max_cycles = st.number_input("Number of cycles", 10, 1000, 100, step=10, key="ga_max_cycles")
+        max_targets_per_day = st.number_input("Max target muscles per day", 1, 20, 5, key="ga_max_targets_per_day")
 
         st.markdown("**Population**")
         population_size = st.number_input("Population size", 10, 500, 60, step=10, key="ga_population_size")
@@ -236,6 +239,7 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
             "days": int(days),
             "exercises_per_day": int(exercises_per_day),
             "max_cycles": int(max_cycles),
+            "max_targets_per_day": int(max_targets_per_day),
             "population_size": int(population_size),
             "elite_count": int(elite_count),
             "crossover_type": str(crossover_type),
