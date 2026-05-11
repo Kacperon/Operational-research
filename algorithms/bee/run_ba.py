@@ -4,15 +4,67 @@
 import json
 import argparse
 from pathlib import Path
+from typing import Any
 import numpy as np
 
 from algorithms.bee.bee_algorithm import BeeAlgorithm
+from algorithms.distribute_exercises.distribute_exercises_ilp import DistributeExercisesILP
 from planner.planner import Planner
 from data.data_loader import DataLoader
+from utils.utils import create_logger
+
+
+logger = create_logger(__name__)
+
+
+def _build_intensity_by_muscle(planner: Planner, plan_indices: np.ndarray) -> list[dict[str, Any]]:
+    intensity_matrix = planner.get_intensity_matrix(plan_indices)
+    return [
+        {
+            "muscle": planner.idx2muscle_group[i],
+            "target_count": int(intensity_matrix[0, i]),
+            "synergist_count": int(intensity_matrix[1, i]),
+            "stabilizer_count": int(intensity_matrix[2, i]),
+            "total_intensity": int(intensity_matrix[0, i] + intensity_matrix[1, i] + intensity_matrix[2, i]),
+        }
+        for i in range(len(planner.idx2muscle_group))
+        if intensity_matrix[0, i] > 0 or intensity_matrix[1, i] > 0 or intensity_matrix[2, i] > 0
+    ]
+
+
+def _build_daily_plans(
+    planner: Planner,
+    exercises_array: list,
+    best_individual: np.ndarray,
+    days: int,
+    max_targets_per_day: int,
+) -> list[dict[str, Any]]:
+    distributor = DistributeExercisesILP(
+        planner=planner,
+        days=days,
+        max_targets_per_day=max_targets_per_day,
+    )
+    daily_indices = distributor.split_exercises(best_individual.copy())
+    daily_plans: list[dict[str, Any]] = []
+    for day_idx, day_plan in enumerate(daily_indices, start=1):
+        day_plan = np.asarray(day_plan, dtype=int)
+        daily_plans.append(
+            {
+                "day": int(day_idx),
+                "exercise_ids": [int(x) for x in day_plan],
+                "exercise_names": [exercises_array[int(idx)].name for idx in day_plan],
+                "exercise_urls": [exercises_array[int(idx)].url for idx in day_plan],
+                "intensity_by_muscle": _build_intensity_by_muscle(planner, day_plan),
+            }
+        )
+    return daily_plans
 
 
 def run_ba(
     num_exercises: int = 10,
+    days: int | None = None,
+    exercises_per_day: int | None = None,
+    max_targets_per_day: int = 5,
     max_cycles: int = 100,
     population_size: int = 60,
     selected_sites: int = 12,
@@ -28,6 +80,23 @@ def run_ba(
     output_dir: str = "algorithms/bee/results",
 ) -> Path:
     """Run BA and save history to JSON."""
+    logger.info(
+        "Starting BA run: num_exercises=%s days=%s exercises_per_day=%s max_cycles=%s",
+        num_exercises,
+        days,
+        exercises_per_day,
+        max_cycles,
+    )
+
+    if (days is None) ^ (exercises_per_day is None):
+        raise ValueError("days and exercises_per_day must be provided together.")
+    if days is not None and exercises_per_day is not None:
+        derived_exercises = int(days) * int(exercises_per_day)
+        if num_exercises != derived_exercises:
+            raise ValueError(
+                "num_exercises must equal days * exercises_per_day "
+                f"({num_exercises} != {derived_exercises})."
+            )
 
     csv_path = Path("data/exrx_exercises_muscles_clean.csv")
     if not csv_path.exists():
@@ -35,6 +104,7 @@ def run_ba(
 
     loader = DataLoader(csv_path)
     exercises_array = loader.exercises()
+    logger.info("Loaded exercises: count=%s source=%s", len(exercises_array), csv_path)
     planner_intensity_weights = np.asarray(intensity_weights, dtype=np.float32).reshape(3, 1)
     planner = Planner(
         exercises_array,
@@ -65,15 +135,25 @@ def run_ba(
     )
 
     result = ba.run(num_exercises_to_plan=num_exercises, max_cycles=max_cycles)
+    logger.info(
+        "BA completed: cycles=%s best_cost=%.6f total_fitness_evals=%s",
+        len(result.best_cost_history),
+        float(result.best_cost),
+        int(result.total_fitness_evals),
+    )
 
     history_data = {
         "metadata": {
-            "num_exercises": num_exercises,
+            "days": int(days) if days is not None else None,
+            "exercises_per_day": int(exercises_per_day) if exercises_per_day is not None else None,
             "num_cycles": len(result.best_cost_history),
             "total_fitness_evals": int(result.total_fitness_evals),
             "total_exercises_in_db": len(exercises_array),
             "muscle_groups": len(planner.idx2muscle_group),
             "ba_params": {
+                "days": int(days) if days is not None else None,
+                "exercises_per_day": int(exercises_per_day) if exercises_per_day is not None else None,
+                "max_targets_per_day": int(max_targets_per_day),
                 "population_size": population_size,
                 "selected_sites": selected_sites,
                 "elite_sites": elite_sites,
@@ -96,7 +176,7 @@ def run_ba(
         best_cost = result.best_cost_history[cycle_idx]
         best_idx = int(np.argmin(costs))
         best_individual = population[best_idx]
-        intensity_matrix = planner.get_intensity_matrix(best_individual)
+        intensity_by_muscle = _build_intensity_by_muscle(planner, best_individual)
 
         cycle_data = {
             "cycle": int(cycle_idx) + 1,
@@ -111,19 +191,25 @@ def run_ba(
             "avg_cost": float(np.mean(costs)),
             "min_cost": float(np.min(costs)),
             "max_cost": float(np.max(costs)),
-            "intensity_by_muscle": [
-                {
-                    "muscle": planner.idx2muscle_group[i],
-                    "target_count": float(intensity_matrix[0, i]),
-                    "synergist_count": float(intensity_matrix[1, i]),
-                    "stabilizer_count": float(intensity_matrix[2, i]),
-                    "total_intensity": float(intensity_matrix[0, i] + intensity_matrix[1, i] + intensity_matrix[2, i]),
-                }
-                for i in range(len(planner.idx2muscle_group))
-                if intensity_matrix[0, i] > 0 or intensity_matrix[1, i] > 0 or intensity_matrix[2, i] > 0
-            ],
+            "intensity_by_muscle": intensity_by_muscle,
         }
         history_data["cycles"].append(cycle_data)
+
+    # Perform exercise split once on final best individual
+    if days is not None and exercises_per_day is not None:
+        try:
+            final_daily_plans = _build_daily_plans(
+                planner,
+                exercises_array,
+                result.best_individual,
+                days=int(days),
+                max_targets_per_day=int(max_targets_per_day),
+            )
+            history_data["metadata"]["daily_plans"] = final_daily_plans
+            logger.info("Final exercise split completed: %d days planned", len(final_daily_plans))
+        except (RuntimeError, ValueError) as exc:
+            history_data["metadata"]["daily_plans_error"] = str(exc)
+            logger.warning("Final exercise split skipped: %s", str(exc))
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -131,12 +217,22 @@ def run_ba(
     with open(history_file, "w") as f:
         json.dump(history_data, f, indent=2, ensure_ascii=False)
 
+    logger.info("BA history saved: %s", history_file)
+
     return history_file
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run Bees Algorithm with custom parameters")
     parser.add_argument("--num-exercises", type=int, default=10, help="Number of exercises in plan")
+    parser.add_argument("--days", type=int, default=None, help="Number of training days")
+    parser.add_argument("--exercises-per-day", type=int, default=None, help="Exercises per day")
+    parser.add_argument(
+        "--max-targets-per-day",
+        type=int,
+        default=3,
+        help="Maximum distinct target muscles per day",
+    )
     parser.add_argument("--max-cycles", type=int, default=100, help="Maximum algorithm cycles")
     parser.add_argument("--population-size", type=int, default=60, help="Population size")
     parser.add_argument("--selected-sites", type=int, default=12, help="Selected sites")
@@ -173,6 +269,9 @@ def main():
 
     output_file = run_ba(
         num_exercises=args.num_exercises,
+        days=args.days,
+        exercises_per_day=args.exercises_per_day,
+        max_targets_per_day=args.max_targets_per_day,
         max_cycles=args.max_cycles,
         population_size=args.population_size,
         selected_sites=args.selected_sites,

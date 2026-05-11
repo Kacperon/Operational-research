@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 from collections import Counter
+import inspect
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,6 +15,7 @@ import plotly.graph_objects as go
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from algorithms.bee.run_ba import run_ba
 from algorithms.genetic.run_ga import run_ga
+from algorithms.distribute_exercises.distribute_exercises_ilp import DistributeExercisesILP
 from vizualization.musclemap_real import MuscleMapReal, BodyGender
 from data.data_loader import DataLoader
 from planner.planner import Planner
@@ -101,15 +103,19 @@ def render_vector_param(
         if changed.empty:
             st.caption("All weights use default value.")
         else:
-            st.dataframe(changed.sort_values("weight", ascending=False), use_container_width=True, hide_index=True)
+            st.dataframe(changed.sort_values("weight", ascending=False), width='stretch', hide_index=True)
 
 
 def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
     """Sidebar form for BA parameters. Returns dict on submit, None otherwise."""
     with st.sidebar.form("ba_params"):
         st.markdown("**Plan**")
-        num_exercises = st.number_input("Number of exercises", 3, 30, 10)
+        days = st.number_input("Training days", 1, 7, 3)
+        exercises_per_day = st.number_input("Exercises per day", 1, 10, 4)
+        total_exercises = int(days) * int(exercises_per_day)
+        st.caption(f"Total exercises: {total_exercises}")
         max_cycles = st.number_input("Number of cycles", 10, 1000, 100, step=10)
+        max_targets_per_day = st.number_input("Max target muscles per day", 1, 20, 5)
 
         st.markdown("**Population**")
         population_size = st.number_input("Population size", 10, 500, 60, step=10)
@@ -147,12 +153,18 @@ def ba_parameters_form(popular_muscles: list[str]) -> dict | None:
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42)
 
-        submitted = st.form_submit_button("▶️ Run BA", use_container_width=True)
+        submitted = st.form_submit_button("▶️ Run BA", width='stretch')
         if not submitted:
             return None
+        if total_exercises < 3 or total_exercises > 30:
+            st.sidebar.error("Total exercises must be between 3 and 30.")
+            return None
         return {
-            "num_exercises": int(num_exercises),
+            "num_exercises": total_exercises,
+            "days": int(days),
+            "exercises_per_day": int(exercises_per_day),
             "max_cycles": int(max_cycles),
+            "max_targets_per_day": int(max_targets_per_day),
             "population_size": int(population_size),
             "selected_sites": int(selected_sites),
             "elite_sites": int(elite_sites),
@@ -175,8 +187,12 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
     """Sidebar form for GA parameters. Returns dict on submit, None otherwise."""
     with st.sidebar.form("ga_params"):
         st.markdown("**Plan**")
-        num_exercises = st.number_input("Number of exercises", 3, 30, 10, key="ga_num_exercises")
+        days = st.number_input("Training days", 1, 7, 3, key="ga_days")
+        exercises_per_day = st.number_input("Exercises per day", 1, 10, 4, key="ga_exercises_per_day")
+        total_exercises = int(days) * int(exercises_per_day)
+        st.caption(f"Total exercises: {total_exercises}")
         max_cycles = st.number_input("Number of cycles", 10, 1000, 100, step=10, key="ga_max_cycles")
+        max_targets_per_day = st.number_input("Max target muscles per day", 1, 20, 5, key="ga_max_targets_per_day")
 
         st.markdown("**Population**")
         population_size = st.number_input("Population size", 10, 500, 60, step=10, key="ga_population_size")
@@ -212,12 +228,18 @@ def ga_parameters_form(popular_muscles: list[str]) -> dict | None:
         st.markdown("**Other**")
         seed = st.number_input("Random seed", 0, 99999, 42, key="ga_seed")
 
-        submitted = st.form_submit_button("▶️ Run GA", use_container_width=True)
+        submitted = st.form_submit_button("▶️ Run GA", width='stretch')
         if not submitted:
             return None
+        if total_exercises < 3 or total_exercises > 30:
+            st.sidebar.error("Total exercises must be between 3 and 30.")
+            return None
         return {
-            "num_exercises": int(num_exercises),
+            "num_exercises": total_exercises,
+            "days": int(days),
+            "exercises_per_day": int(exercises_per_day),
             "max_cycles": int(max_cycles),
+            "max_targets_per_day": int(max_targets_per_day),
             "population_size": int(population_size),
             "elite_count": int(elite_count),
             "crossover_type": str(crossover_type),
@@ -498,6 +520,11 @@ def params_from_metadata(metadata: dict) -> dict:
     return {}
 
 
+def filter_params_for_callable(callable_obj, params: dict) -> dict:
+    signature = inspect.signature(callable_obj)
+    return {key: value for key, value in params.items() if key in signature.parameters}
+
+
 def main():
     st.set_page_config(layout="wide", page_title="Workout Algorithm Dashboard")
     st.title("Workout Algorithm Dashboard")
@@ -519,7 +546,7 @@ def main():
                 )
             if new_params is not None:
                 with st.spinner("Running Bees Algorithm…"):
-                    run_ba(**new_params)
+                    run_ba(**filter_params_for_callable(run_ba, new_params))
                 st.sidebar.success("Done - results reloaded.")
     else:
         new_params = ga_parameters_form(popular_muscles)
@@ -533,7 +560,7 @@ def main():
                 )
             if new_params is not None:
                 with st.spinner("Running Genetic Algorithm…"):
-                    run_ga(**new_params)
+                    run_ga(**filter_params_for_callable(run_ga, new_params))
                 st.sidebar.success("Done - results reloaded.")
 
     if not history_path.exists():
@@ -625,7 +652,7 @@ def main():
             "Exercise": names,
             "Link": urls,
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             "Link": st.column_config.LinkColumn(
@@ -634,6 +661,95 @@ def main():
         },
     )
 
+    daily_plans = metadata.get("daily_plans")
+    daily_plans_error = metadata.get("daily_plans_error")
+    if isinstance(daily_plans, list) and daily_plans:
+        st.header("Per-Day Plan")
+        day_rows: list[dict[str, object]] = []
+        for day_data in daily_plans:
+            day_label = f"Day {day_data['day']}"
+            day_names = day_data.get("exercise_names", [])
+            day_ids = day_data.get("exercise_ids", [])
+            day_urls = day_data.get("exercise_urls", [""] * len(day_names))
+            for idx, name in enumerate(day_names):
+                day_rows.append(
+                    {
+                        "Day": day_label,
+                        "#": idx + 1,
+                        "Exercise ID": day_ids[idx] if idx < len(day_ids) else "",
+                        "Exercise": name,
+                        "Link": day_urls[idx] if idx < len(day_urls) else "",
+                    }
+                )
+
+        st.subheader("All Days Overview")
+        if day_rows:
+            st.dataframe(
+                pd.DataFrame(day_rows),
+                width='stretch',
+                hide_index=True,
+                column_config={
+                    "Link": st.column_config.LinkColumn(
+                        "Link", display_text="ExRx →", help="Open exercise description on ExRx.net"
+                    ),
+                },
+            )
+
+        day_labels = [f"Day {day_data['day']}" for day_data in daily_plans]
+        selected_day_label = st.selectbox("Select day", day_labels)
+        selected_day = day_labels.index(selected_day_label)
+        day_data = daily_plans[selected_day]
+
+        st.subheader(f"{selected_day_label} Muscle Activation")
+        day_body_model = MuscleMapReal(gender=body_gender, figsize=(14, 8))
+        day_body_model.apply_muscle_intensity(day_data.get("intensity_by_muscle", []))
+        day_body_model.fig.suptitle(
+            f"{selected_day_label} - Muscle Activation Heatmap ({gender})",
+            fontsize=16,
+            weight="bold",
+        )
+        st.pyplot(day_body_model.fig)
+
+        st.subheader(f"{selected_day_label} Exercises")
+        day_names = day_data.get("exercise_names", [])
+        day_plan = day_data.get("exercise_ids", [])
+        day_urls = day_data.get("exercise_urls", [""] * len(day_names))
+
+        # Load exercises to get target muscles
+        csv_path = Path("data/exrx_exercises_muscles_clean.csv")
+        if not csv_path.exists():
+            csv_path = Path("data/exrx_exercises_muscles_with_body_part.csv")
+        loader = DataLoader(csv_path)
+        exercises_array = loader.exercises()
+
+        # Map exercise IDs to target muscles
+        day_targets: list[str] = []
+        for ex_id in day_plan:
+            if 0 <= ex_id < len(exercises_array):
+                targets = exercises_array[int(ex_id)].targets
+                day_targets.append(", ".join(targets) if targets else "N/A")
+            else:
+                day_targets.append("N/A")
+
+        st.dataframe(
+            pd.DataFrame({
+                "#": range(1, len(day_names) + 1),
+                "Exercise ID": day_plan,
+                "Exercise": day_names,
+                "Target Muscles": day_targets,
+                "Link": day_urls,
+            }),
+            width='stretch',
+            hide_index=True,
+            column_config={
+                "Link": st.column_config.LinkColumn(
+                    "Link", display_text="ExRx →", help="Open exercise description on ExRx.net"
+                ),
+            },
+        )
+    elif isinstance(daily_plans_error, str) and daily_plans_error:
+        st.warning(f"Per-day split unavailable: {daily_plans_error}")
+
     # Muscle intensity details
     st.header("Muscle Activation Details")
     muscle_df = pd.DataFrame(cycle_data["intensity_by_muscle"])
@@ -641,7 +757,7 @@ def main():
         muscle_df = muscle_df.sort_values("total_intensity", ascending=False)
         st.dataframe(
             muscle_df[["muscle", "target_count", "synergist_count", "stabilizer_count", "total_intensity"]].head(20),
-            use_container_width=True,
+            width='stretch',
         )
 
 

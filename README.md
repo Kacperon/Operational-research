@@ -41,6 +41,92 @@ Logika optymalizacji opiera się na dwóch filarach:
 
 ---
 
+## Dystrybucja Ćwiczeń na Dni Treningowe (MILP)
+
+Po wyborze sekwencji $n$ ćwiczeń za pomocą algorytmu ewolucyjnego (Bees Algorithm lub Genetic Algorithm), wybraną sekwencję należy rozłożyć na $k$ dni treningowych, po $p = n/k$ ćwiczeń każdego dnia. Problem ten rozwiązuje algorytm **Mixed-Integer Linear Programming (MILP)**.
+
+### Sformułowanie Problemu
+
+Dysponujemy:
+* **Wybrane ćwiczenia:** $n$ ćwiczeń wybranych przez algorytm heurystyczny, reprezentowanych jako wektory indeksów.
+* **Liczba dni treningowych:** $k \in \mathbb{N}$ (np. 3, 5 dni).
+* **Maksymalna liczba docelowych grup mięśniowych na dzień:** $m_{\max} \in \mathbb{N}$ (np. 3 — każdy dzień skupia się na co najwyżej 3 grupach docelowych).
+
+### Zmienne Decyzyjne
+
+1. **$z_{i,d} \in \{0, 1\}$** — ćwiczenie $i$ jest przypisane do dnia $d$.
+2. **$y_{t,d} \in \{0, 1\}$** — grupa docelowa $t$ jest aktywna (pojawia się) w dniu $d$.
+3. **$w_{d,g} \geq 0$** — zmienna pomocnicza do linearyzacji wartości bezwzględnej: $w_{d,g} \geq |L_{d,g} - \mu_d|$, gdzie $L_{d,g}$ to całkowite ważone obciążenie mięśnia $g$ w dniu $d$.
+
+### Funkcja Celu
+
+Minimalizujemy:
+
+$$\text{Obj} = \gamma \sum_{d=1}^{k} \sum_{g=1}^{|G|} w_{d,g} - \sum_{d=1}^{k} \sum_{g=1}^{|G|} L_{d,g} \cdot \alpha_g$$
+
+Gdzie:
+* **Pierwszy termin** ($\gamma \sum w_{d,g}$): penalizuje nierównomierny rozkład obciążenia między grupy mięśniowe w każdym dniu (zmniejsza wariancję dzienną).
+* **Drugi termin** ($-\sum L_{d,g} \cdot \alpha_g$): promuje przypisanie ćwiczeń, które obciążają mięśnie o wysokiej preferencji ($\alpha_g$).
+
+### Ograniczenia
+
+1. **Każde ćwiczenie przypisane dokładnie raz:**
+   $$\sum_{d=1}^{k} z_{i,d} = 1 \quad \forall i$$
+
+2. **Każdy dzień ma dokładnie $p$ ćwiczeń:**
+   $$\sum_{i=1}^{n} z_{i,d} = p \quad \forall d$$
+
+3. **Maksymalna liczba docelowych grup na dzień:**
+   $$\sum_{t=1}^{|T|} y_{t,d} \leq m_{\max} \quad \forall d$$
+   gdzie $|T|$ to liczba distinct docelowych grup wśród wybranych ćwiczeń.
+
+4. **Aktywacja grupy docelowej (big-M constraint):**
+   $$\sum_{i: t \in \text{targets}(i)} z_{i,d} \leq p \cdot y_{t,d} \quad \forall t, d$$
+   — jeśli grupa $t$ pojawia się w jakimkolwiek ćwiczeniu na dzień $d$, wówczas $y_{t,d}$ musi być 1.
+
+5. **Linearyzacja wartości bezwzględnej:**
+   $$w_{d,g} \geq L_{d,g} - \mu_d \quad \forall d, g$$
+   $$w_{d,g} \geq \mu_d - L_{d,g} \quad \forall d, g$$
+   gdzie $\mu_d = \frac{1}{|G|} \sum_{g=1}^{|G|} L_{d,g}$ to średnie dzienne obciążenie.
+
+### Solver
+
+Algorytm wykorzystuje solvery MILP wspierane przez bibliotekę **cvxpy**, z priorytetem dla **HiGHS** (wbudowany w cvxpy ≥ 1.4). W przypadku niedostępności HiGHS próbuje SCIP, CPLEX, Gurobi i ECOS_BB.
+
+### Integracja w Pipeline
+
+```mermaid
+graph TD
+    A["🔍 Algorytm Ewolucyjny<br/>(Bees / Genetic Algorithm)"]
+    B["Parametry wejściowe:<br/>- Liczba ćwiczeń: n<br/>- Liczba cykli: max_cycles<br/>- Parametry populacji"]
+    C["Optymalizacja sekwencji<br/>ćwiczeń za pomocą<br/>funkcji kosztu"]
+    D["Wybrana sekwencja<br/>n ćwiczeń"]
+    E["📊 MILP Distributor<br/>(DistributeExercisesILP)"]
+    F["Parametry:<br/>- Liczba dni: k<br/>- Max grup docelowych/dzień: m_max"]
+    G["Rozłożenie ćwiczeń<br/>na k dni treningowych"]
+    H["Plan dnia-po-dzień<br/>p = n/k ćwiczeń każdego dnia"]
+    I["📈 Dashboard<br/>(Streamlit)"]
+    J["Wizualizacja:<br/>- Heatmapa mięśni<br/>- Tabele ćwiczeń<br/>- Wykresy konwergencji"]
+
+    B --> A
+    A --> C
+    C --> D
+    D --> E
+    F --> E
+    E --> G
+    G --> H
+    H --> I
+    I --> J
+
+    style A fill:#e1f5ff
+    style E fill:#f3e5f5
+    style I fill:#e8f5e9
+    style D fill:#fff9c4
+    style H fill:#fff9c4
+```
+
+---
+
 ## Format danych
 
 **Wejście** — `data/exrx_exercises_muscles_clean.csv` (zescrapowane z ExRx.net):

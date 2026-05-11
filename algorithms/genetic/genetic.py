@@ -1,6 +1,11 @@
 from typing import Callable, Literal
 import numpy as np
 
+from utils.utils import create_logger
+
+
+logger = create_logger(__name__)
+
 class Genetic:
     def __init__(
             self,
@@ -87,10 +92,21 @@ class Genetic:
         ).reshape(population_size)
 
         # Convert costs into positive selection weights (lower cost => higher weight).
-        selection_weights = np.max(fitness_scores) - fitness_scores + 1e-12
-        elite_indices = np.argsort(fitness_scores)[:elite_count] if elite_count > 0 else np.array([], dtype=int)
-
-        selection_probabilities = selection_weights / np.sum(selection_weights)
+        finite_scores = fitness_scores[np.isfinite(fitness_scores)]
+        if finite_scores.size == 0:
+            logger.warning("All fitness scores are non-finite; using uniform parent selection")
+            selection_probabilities = np.full(population_size, 1.0 / population_size)
+            elite_indices = np.array([], dtype=int)
+        else:
+            safe_scores = np.where(np.isfinite(fitness_scores), fitness_scores, np.max(finite_scores))
+            selection_weights = np.max(safe_scores) - safe_scores + 1e-12
+            total_weight = float(np.sum(selection_weights))
+            if not np.isfinite(total_weight) or total_weight <= 0.0:
+                logger.warning("Invalid GA selection weights sum=%s; using uniform parent selection", total_weight)
+                selection_probabilities = np.full(population_size, 1.0 / population_size)
+            else:
+                selection_probabilities = selection_weights / total_weight
+            elite_indices = np.argsort(safe_scores)[:elite_count] if elite_count > 0 else np.array([], dtype=int)
 
         next_population = np.empty_like(population)
 
